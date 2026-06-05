@@ -1,0 +1,1331 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Marlow — least-privilege GitHub access for LLMs</title>
+    <meta
+      name="description"
+      content="Marlow is a local GitHub API broker that gives an LLM read and write access to a fixed allow-list of private repositories — every request validated, every repo checked, the token held only in memory."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;450;500;600&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      /* Hallmark · macrostructure: Long Document · tone: austere · anchor hue: cool-neutral (single restrained blue) */
+      /* Hallmark · genre: modern-minimal · nav: minimal-anchor · footer: statement (dark band) */
+      /* Hallmark · pre-emit critique: P5 H5 E4 S5 R5 V4 */
+
+      :root {
+        /* paper / ink — near-monochrome */
+        --color-paper: oklch(99% 0.001 250);
+        --color-paper-2: oklch(97% 0.001 250);
+        --color-paper-3: oklch(94.5% 0.002 250);
+        --color-ink: oklch(20% 0.004 260);
+        --color-ink-2: oklch(43% 0.005 260);
+        --color-ink-3: oklch(58% 0.006 260);
+        --color-rule: oklch(90% 0.003 260);
+        --color-rule-2: oklch(84% 0.004 260);
+        /* one restrained accent — links, focus, write-marker only */
+        --color-accent: oklch(52% 0.13 252);
+        --color-accent-soft: oklch(95% 0.03 252);
+        --color-focus: oklch(52% 0.13 252);
+        /* dark band (footer + invert) */
+        --color-night: oklch(17% 0.006 260);
+        --color-night-2: oklch(72% 0.006 260);
+        --color-night-rule: oklch(30% 0.006 260);
+        --color-code-fg: oklch(92% 0.005 260);
+        --color-code-punc: oklch(70% 0.1 252);
+        --color-foot-h: oklch(96% 0.004 260);
+
+        --font-display: 'Space Grotesk', ui-sans-serif, system-ui, sans-serif;
+        --font-body: 'Inter', ui-sans-serif, system-ui, sans-serif;
+        --font-mono:
+          'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+
+        --text-eyebrow: 0.72rem;
+        --text-sm: 0.86rem;
+        --text-base: 1.02rem;
+        --text-lg: 1.2rem;
+        --text-xl: clamp(1.35rem, 1.1rem + 1.1vw, 1.85rem);
+        --text-2xl: clamp(1.8rem, 1.3rem + 2.2vw, 2.9rem);
+        --text-display: clamp(2.6rem, 1.4rem + 5.4vw, 5.4rem);
+
+        --space-3xs: 0.25rem;
+        --space-2xs: 0.5rem;
+        --space-xs: 0.75rem;
+        --space-sm: 1rem;
+        --space-md: 1.5rem;
+        --space-lg: 2.5rem;
+        --space-xl: 4rem;
+        --space-2xl: clamp(4.5rem, 3rem + 7vw, 9rem);
+
+        --measure: 64ch;
+        --maxw: 1080px;
+
+        --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+        --dur: 0.55s;
+        --rule: 1px solid var(--color-rule);
+      }
+
+      *,
+      *::before,
+      *::after {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        margin: 0;
+        overflow-x: clip;
+      }
+
+      html {
+        scroll-behavior: smooth;
+      }
+
+      body {
+        background: var(--color-paper);
+        color: var(--color-ink);
+        font-family: var(--font-body);
+        font-size: var(--text-base);
+        line-height: 1.62;
+        font-feature-settings: 'kern', 'liga', 'cv11';
+        -webkit-font-smoothing: antialiased;
+        text-rendering: optimizeLegibility;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        html {
+          scroll-behavior: auto;
+        }
+      }
+
+      h1,
+      h2,
+      h3 {
+        font-family: var(--font-display);
+        font-weight: 500;
+        letter-spacing: -0.022em;
+        line-height: 1.05;
+        margin: 0;
+        overflow-wrap: anywhere;
+      }
+
+      p {
+        margin: 0;
+      }
+
+      code {
+        font-family: var(--font-mono);
+        font-size: 0.84em;
+        background: var(--color-paper-3);
+        color: var(--color-ink);
+        padding: 0.1em 0.36em;
+        border-radius: 4px;
+        overflow-wrap: anywhere;
+      }
+
+      a {
+        color: var(--color-accent);
+        text-decoration: none;
+        text-underline-offset: 0.18em;
+        text-decoration-thickness: 1px;
+      }
+
+      a:hover {
+        text-decoration: underline;
+      }
+
+      :focus-visible {
+        outline: 2px solid var(--color-focus);
+        outline-offset: 3px;
+        border-radius: 2px;
+      }
+
+      .skip {
+        position: absolute;
+        left: -999px;
+        top: 0;
+        background: var(--color-ink);
+        color: var(--color-paper);
+        padding: 0.6rem 1rem;
+        z-index: 100;
+        font-family: var(--font-mono);
+        font-size: var(--text-sm);
+      }
+      .skip:focus {
+        left: var(--space-sm);
+        top: var(--space-sm);
+      }
+
+      .wrap {
+        width: 100%;
+        max-width: var(--maxw);
+        margin-inline: auto;
+        padding-inline: clamp(1.25rem, 5vw, 2.5rem);
+      }
+
+      .eyebrow {
+        font-family: var(--font-mono);
+        font-size: var(--text-eyebrow);
+        font-weight: 500;
+        text-transform: uppercase;
+        letter-spacing: 0.2em;
+        color: var(--color-ink-3);
+        margin: 0;
+      }
+
+      /* ---------- nav ---------- */
+      .nav {
+        position: sticky;
+        top: 0;
+        z-index: 50;
+        background: color-mix(in oklab, var(--color-paper) 82%, transparent);
+        backdrop-filter: saturate(140%) blur(10px);
+        border-bottom: var(--rule);
+      }
+      .nav__in {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        height: 4.25rem;
+      }
+      .brand {
+        font-family: var(--font-display);
+        font-weight: 600;
+        font-size: 1.15rem;
+        letter-spacing: -0.03em;
+        color: var(--color-ink);
+        display: inline-flex;
+        align-items: center;
+        gap: 0.55rem;
+      }
+      .brand::before {
+        content: '';
+        width: 9px;
+        height: 9px;
+        background: var(--color-ink);
+        border-radius: 50%;
+      }
+      .brand:hover {
+        text-decoration: none;
+      }
+      .nav__links {
+        display: flex;
+        gap: clamp(1rem, 2.5vw, 2rem);
+        font-family: var(--font-mono);
+        font-size: var(--text-sm);
+      }
+      .nav__links a {
+        color: var(--color-ink-2);
+      }
+      .nav__links a:hover {
+        color: var(--color-ink);
+        text-decoration: none;
+      }
+      @media (max-width: 680px) {
+        .nav__links {
+          display: none;
+        }
+      }
+
+      /* ---------- hero ---------- */
+      .hero {
+        padding-block: clamp(4rem, 3rem + 9vw, 8.5rem) var(--space-2xl);
+      }
+      .hero h1 {
+        font-size: var(--text-display);
+        font-weight: 600;
+        letter-spacing: -0.035em;
+        max-width: 18ch;
+        margin-top: var(--space-md);
+      }
+      .hero__lede {
+        max-width: 56ch;
+        margin-top: var(--space-lg);
+        font-size: var(--text-lg);
+        line-height: 1.5;
+        color: var(--color-ink-2);
+      }
+      .hero__meta {
+        margin-top: var(--space-xl);
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem 1.25rem;
+        font-family: var(--font-mono);
+        font-size: var(--text-sm);
+        color: var(--color-ink-3);
+      }
+      .hero__meta span {
+        display: inline-flex;
+        gap: 0.5rem;
+      }
+      .hero__meta b {
+        color: var(--color-ink);
+        font-weight: 500;
+      }
+
+      /* ---------- figures ---------- */
+      .figures {
+        border-block: var(--rule);
+      }
+      .figures__grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        padding-block: var(--space-xl);
+        gap: var(--space-lg) var(--space-md);
+      }
+      .figure__n {
+        font-family: var(--font-display);
+        font-weight: 500;
+        font-size: clamp(2.2rem, 1.4rem + 2.6vw, 3.4rem);
+        letter-spacing: -0.04em;
+        line-height: 1;
+      }
+      .figure__l {
+        margin-top: 0.7rem;
+        font-family: var(--font-mono);
+        font-size: var(--text-sm);
+        color: var(--color-ink-3);
+        line-height: 1.4;
+      }
+      @media (max-width: 620px) {
+        .figures__grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+
+      /* ---------- generic section ---------- */
+      .section {
+        padding-block: var(--space-2xl);
+        border-bottom: var(--rule);
+      }
+      .section__head {
+        max-width: var(--measure);
+        margin-bottom: var(--space-xl);
+      }
+      .section__head h2 {
+        font-size: var(--text-2xl);
+        margin-top: var(--space-sm);
+      }
+      .section__head p {
+        margin-top: var(--space-md);
+        color: var(--color-ink-2);
+        max-width: var(--measure);
+      }
+
+      /* ---------- principles (security) ---------- */
+      .principles {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 1px;
+        background: var(--color-rule);
+        border: var(--rule);
+      }
+      .principle {
+        background: var(--color-paper);
+        padding: var(--space-lg);
+      }
+      .principle__n {
+        font-family: var(--font-mono);
+        font-size: var(--text-sm);
+        color: var(--color-accent);
+      }
+      .principle h3 {
+        font-size: var(--text-xl);
+        font-weight: 500;
+        margin-top: var(--space-md);
+      }
+      .principle p {
+        margin-top: var(--space-xs);
+        color: var(--color-ink-2);
+        font-size: 0.97rem;
+      }
+      @media (max-width: 680px) {
+        .principles {
+          grid-template-columns: minmax(0, 1fr);
+        }
+      }
+
+      /* ---------- stack (built with) ---------- */
+      .stack {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 0 var(--space-2xl);
+      }
+      .stack__row {
+        display: grid;
+        grid-template-columns: 9.5rem minmax(0, 1fr);
+        gap: var(--space-md);
+        align-items: baseline;
+        padding-block: var(--space-md);
+        border-top: var(--rule);
+      }
+      .stack__name {
+        font-family: var(--font-mono);
+        font-size: var(--text-sm);
+        font-weight: 500;
+        color: var(--color-ink);
+      }
+      .stack__role {
+        color: var(--color-ink-2);
+        font-size: 0.97rem;
+      }
+      @media (max-width: 760px) {
+        .stack {
+          grid-template-columns: minmax(0, 1fr);
+          gap: 0;
+        }
+      }
+      @media (max-width: 420px) {
+        .stack__row {
+          grid-template-columns: minmax(0, 1fr);
+          gap: var(--space-3xs);
+        }
+      }
+
+      /* ---------- architecture ---------- */
+      .arch {
+        display: grid;
+        grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+        gap: var(--space-2xl) var(--space-xl);
+        align-items: start;
+      }
+      @media (max-width: 820px) {
+        .arch {
+          grid-template-columns: minmax(0, 1fr);
+          gap: var(--space-xl);
+        }
+      }
+      .panel {
+        border: var(--rule);
+        background: var(--color-paper-2);
+      }
+      .panel__cap {
+        font-family: var(--font-mono);
+        font-size: var(--text-eyebrow);
+        text-transform: uppercase;
+        letter-spacing: 0.18em;
+        color: var(--color-ink-3);
+        padding: var(--space-sm) var(--space-md);
+        border-bottom: var(--rule);
+      }
+      .layers {
+        list-style: none;
+        margin: 0;
+        padding: var(--space-2xs) 0;
+      }
+      .layers li {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: 0.25rem 1rem;
+        padding: var(--space-sm) var(--space-md);
+        font-family: var(--font-mono);
+        font-size: var(--text-sm);
+      }
+      .layers li + li {
+        border-top: 1px dashed var(--color-rule);
+      }
+      .layers .lname {
+        color: var(--color-ink);
+        font-weight: 500;
+      }
+      .layers .lrole {
+        color: var(--color-ink-3);
+        text-align: right;
+      }
+      .layers li[data-root] {
+        background: var(--color-paper-3);
+      }
+      .arch__note {
+        margin-top: var(--space-md);
+        font-size: 0.95rem;
+        color: var(--color-ink-2);
+      }
+
+      .flow {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+        counter-reset: step;
+      }
+      .flow li {
+        position: relative;
+        padding: 0 0 var(--space-lg) var(--space-xl);
+        border-left: 1px solid var(--color-rule-2);
+        counter-increment: step;
+      }
+      .flow li:last-child {
+        padding-bottom: 0;
+        border-left-color: transparent;
+      }
+      .flow li::before {
+        content: counter(step, decimal-leading-zero);
+        position: absolute;
+        left: 0;
+        top: -0.15em;
+        transform: translateX(-50%);
+        background: var(--color-paper);
+        color: var(--color-ink-3);
+        font-family: var(--font-mono);
+        font-size: 0.72rem;
+        padding: 0.15rem 0;
+      }
+      .flow .fstep {
+        font-family: var(--font-mono);
+        font-size: var(--text-sm);
+        color: var(--color-ink);
+      }
+      .flow .fsub {
+        margin-top: 0.2rem;
+        font-size: 0.92rem;
+        color: var(--color-ink-3);
+      }
+      .flow li[data-gate]::before {
+        color: var(--color-accent);
+      }
+      .flow li[data-gate] {
+        border-left-color: var(--color-accent);
+      }
+      .flow .fgate {
+        color: var(--color-accent);
+      }
+
+      /* ---------- code ---------- */
+      .codecap {
+        font-family: var(--font-mono);
+        font-size: var(--text-eyebrow);
+        text-transform: uppercase;
+        letter-spacing: 0.18em;
+        color: var(--color-ink-3);
+        margin-bottom: var(--space-2xs);
+      }
+      pre {
+        margin: 0 0 var(--space-md);
+        padding: var(--space-md) var(--space-lg);
+        background: var(--color-night);
+        color: var(--color-code-fg);
+        border-radius: 6px;
+        overflow-x: auto;
+        font-family: var(--font-mono);
+        font-size: 0.86rem;
+        line-height: 1.7;
+      }
+      pre code {
+        background: none;
+        padding: 0;
+        font-size: inherit;
+        color: inherit;
+      }
+      pre .c {
+        color: var(--color-night-2);
+      }
+      pre .p {
+        color: var(--color-code-punc);
+      }
+      .run__grid {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 0.85fr);
+        gap: var(--space-xl);
+        align-items: start;
+      }
+      @media (max-width: 760px) {
+        .run__grid {
+          grid-template-columns: minmax(0, 1fr);
+          gap: var(--space-lg);
+        }
+      }
+      .run__aside p {
+        color: var(--color-ink-2);
+        font-size: 0.95rem;
+      }
+      .run__aside p + p {
+        margin-top: var(--space-md);
+      }
+      .kbd {
+        font-family: var(--font-mono);
+        font-size: 0.85em;
+        background: var(--color-paper-3);
+        padding: 0.1em 0.4em;
+        border-radius: 4px;
+        color: var(--color-ink);
+      }
+
+      /* ---------- tables ---------- */
+      .scroll {
+        overflow-x: auto;
+        border: var(--rule);
+        border-radius: 6px;
+      }
+      table {
+        width: 100%;
+        min-width: 560px;
+        border-collapse: collapse;
+        font-size: 0.92rem;
+      }
+      th,
+      td {
+        text-align: left;
+        padding: 0.85rem var(--space-md);
+        border-bottom: var(--rule);
+        vertical-align: top;
+      }
+      tr:last-child td {
+        border-bottom: none;
+      }
+      thead th {
+        font-family: var(--font-mono);
+        font-size: var(--text-eyebrow);
+        text-transform: uppercase;
+        letter-spacing: 0.12em;
+        color: var(--color-ink-3);
+        font-weight: 500;
+        background: var(--color-paper-2);
+      }
+      td.mono,
+      th.mono {
+        font-family: var(--font-mono);
+        font-size: 0.84rem;
+        color: var(--color-ink);
+        white-space: nowrap;
+      }
+      td .muted {
+        color: var(--color-ink-3);
+      }
+      .req {
+        font-family: var(--font-mono);
+        font-size: 0.72rem;
+        letter-spacing: 0.04em;
+        color: var(--color-accent);
+      }
+      .legend {
+        margin-top: var(--space-md);
+        font-family: var(--font-mono);
+        font-size: var(--text-sm);
+        color: var(--color-ink-3);
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+      }
+      .dot {
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: var(--color-accent);
+        display: inline-block;
+      }
+      .verb {
+        font-weight: 600;
+        color: var(--color-ink-2);
+      }
+      .verb--post {
+        color: var(--color-accent);
+      }
+
+      /* ---------- footer ---------- */
+      .foot {
+        background: var(--color-night);
+        color: var(--color-night-2);
+      }
+      .foot__in {
+        padding-block: var(--space-2xl);
+      }
+      .foot h2 {
+        color: var(--color-foot-h);
+        font-size: var(--text-2xl);
+        font-weight: 500;
+        max-width: 20ch;
+      }
+      .foot__meta {
+        margin-top: var(--space-xl);
+        padding-top: var(--space-lg);
+        border-top: 1px solid var(--color-night-rule);
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: space-between;
+        gap: var(--space-md);
+        font-family: var(--font-mono);
+        font-size: var(--text-sm);
+      }
+      .foot__meta span {
+        color: var(--color-night-2);
+      }
+
+      /* ---------- reveal ---------- */
+      .reveal {
+        opacity: 0;
+        transform: translateY(14px);
+        transition:
+          opacity var(--dur) var(--ease-out),
+          transform var(--dur) var(--ease-out);
+        will-change: opacity, transform;
+      }
+      .reveal.in {
+        opacity: 1;
+        transform: none;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .reveal {
+          opacity: 1;
+          transform: none;
+          transition: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+
+    <header class="nav">
+      <div class="wrap nav__in">
+        <a class="brand" href="#top">Marlow</a>
+        <nav class="nav__links" aria-label="Sections">
+          <a href="#security">Security</a>
+          <a href="#architecture">Architecture</a>
+          <a href="#run">Run</a>
+          <a href="#api">API</a>
+        </nav>
+      </div>
+    </header>
+
+    <main id="main">
+      <!-- HERO -->
+      <section class="hero" id="top">
+        <div class="wrap">
+          <p class="eyebrow">Local GitHub API broker</p>
+          <h1>Least-privilege GitHub access for LLMs.</h1>
+          <p class="hero__lede">
+            Marlow is a small local HTTP service that lets an LLM read and write
+            a <em>fixed</em> set of private repositories — and nothing else.
+            Every request is validated, every repository is checked against a
+            closed allow-list, and the token is held only in memory.
+          </p>
+          <div class="hero__meta">
+            <span><b>JSON-only</b> HTTP API</span>
+            <span><b>Local-first</b> — binds loopback by default</span>
+            <span><b>Read + write</b>, writes gated by confirmation</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- FIGURES (real numbers only) -->
+      <section class="figures" aria-label="At a glance">
+        <div class="wrap figures__grid">
+          <div class="reveal">
+            <div class="figure__n">2</div>
+            <div class="figure__l">repositories on the allow-list</div>
+          </div>
+          <div class="reveal">
+            <div class="figure__n">7</div>
+            <div class="figure__l">Nx projects · 1 app, 6 libraries</div>
+          </div>
+          <div class="reveal">
+            <div class="figure__n">21</div>
+            <div class="figure__l">repo-scoped use cases</div>
+          </div>
+          <div class="reveal">
+            <div class="figure__n">0</div>
+            <div class="figure__l">tokens written to disk</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- SECURITY MODEL -->
+      <section class="section" id="security">
+        <div class="wrap">
+          <div class="section__head reveal">
+            <p class="eyebrow">The security model</p>
+            <h2>The whole point is what it won't do.</h2>
+            <p>
+              Marlow exists to hand an autonomous agent a key that only opens
+              two doors. The boundary is enforced in the domain layer, before
+              any network call or credential read — not bolted on at the edge.
+            </p>
+          </div>
+
+          <div class="principles reveal">
+            <article class="principle">
+              <div class="principle__n">01</div>
+              <h3>Closed allow-list</h3>
+              <p>
+                Only <code>nrwl/ocean</code> and <code>nrwl/nx</code> are
+                reachable. Any other repository is rejected with
+                <code>403 repo_not_allowed</code> before GitHub is ever
+                contacted.
+              </p>
+            </article>
+            <article class="principle">
+              <div class="principle__n">02</div>
+              <h3>The token only lives in memory</h3>
+              <p>
+                Marlow reads the token once from
+                <code>MARLOW_GITHUB_TOKEN</code> and holds it in memory — never
+                logged, never written to disk.
+              </p>
+            </article>
+            <article class="principle">
+              <div class="principle__n">03</div>
+              <h3>Writes require confirmation</h3>
+              <p>
+                Creating an issue, comment, or pull request — or closing one —
+                requires <code>{ "confirm": true }</code> in the body. No
+                accidental mutations.
+              </p>
+            </article>
+            <article class="principle">
+              <div class="principle__n">04</div>
+              <h3>No raw GitHub payloads</h3>
+              <p>
+                Every response is mapped to a small internal DTO. Upstream
+                fields and error text never pass straight through to the caller.
+              </p>
+            </article>
+            <article class="principle">
+              <div class="principle__n">05</div>
+              <h3>Bring your own secret source</h3>
+              <p>
+                Marlow asks only for a token. Fetch it however you trust —
+                pass-cli, 1Password, Vault, a CI secret — Marlow neither knows
+                nor cares where it came from.
+              </p>
+            </article>
+            <article class="principle">
+              <div class="principle__n">06</div>
+              <h3>Sanitized failures</h3>
+              <p>
+                Credential and upstream errors surface a stable code and status
+                — never a stack trace, a secret, or the raw request.
+              </p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <!-- BUILT WITH -->
+      <section class="section" id="stack">
+        <div class="wrap">
+          <div class="section__head reveal">
+            <p class="eyebrow">Built with</p>
+            <h2>A short, deliberate toolchain.</h2>
+            <p>
+              Each piece earns its place; there is no second build system and no
+              second test runner. TypeScript runs strict, end to end.
+            </p>
+          </div>
+          <div class="stack reveal">
+            <div class="stack__row">
+              <div class="stack__name">Nx</div>
+              <div class="stack__role">
+                Monorepo workspace and task runner, on TypeScript project
+                references.
+              </div>
+            </div>
+            <div class="stack__row">
+              <div class="stack__name">TypeScript</div>
+              <div class="stack__role">
+                Strict mode across every library and the app.
+              </div>
+            </div>
+            <div class="stack__row">
+              <div class="stack__name">Fastify</div>
+              <div class="stack__role">
+                The HTTP server and the composition root.
+              </div>
+            </div>
+            <div class="stack__row">
+              <div class="stack__name">Zod</div>
+              <div class="stack__role">
+                Request validation at the edge — params, query, and body.
+              </div>
+            </div>
+            <div class="stack__row">
+              <div class="stack__name">Octokit</div>
+              <div class="stack__role">
+                The GitHub client, hidden behind a port and a DTO mapper.
+              </div>
+            </div>
+            <div class="stack__row">
+              <div class="stack__name">Vitest</div>
+              <div class="stack__role">
+                Tests at every layer, including the security boundary itself.
+              </div>
+            </div>
+            <div class="stack__row">
+              <div class="stack__name">esbuild</div>
+              <div class="stack__role">
+                Bundles the app and its source libraries into one runnable file.
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ARCHITECTURE -->
+      <section class="section" id="architecture">
+        <div class="wrap">
+          <div class="section__head reveal">
+            <p class="eyebrow">How it works</p>
+            <h2>Dependencies point inward.</h2>
+            <p>
+              A DDD-lite layout: pure rules at the centre, infrastructure at the
+              edge, and an app that wires them together. The domain knows
+              nothing about HTTP, GitHub, or where the token comes from.
+            </p>
+          </div>
+
+          <div class="arch">
+            <div class="reveal">
+              <div class="panel">
+                <div class="panel__cap">Layers · outer depends on inner</div>
+                <ul class="layers">
+                  <li data-root>
+                    <span class="lname">marlow-api</span>
+                    <span class="lrole">Fastify · composition root</span>
+                  </li>
+                  <li>
+                    <span class="lname">api-contracts · api-errors</span>
+                    <span class="lrole">Zod schemas · error vocabulary</span>
+                  </li>
+                  <li>
+                    <span class="lname">infrastructure-github</span>
+                    <span class="lrole">Octokit adapter · DTO mapping</span>
+                  </li>
+                  <li>
+                    <span class="lname">infrastructure-credentials</span>
+                    <span class="lrole">static token provider</span>
+                  </li>
+                  <li>
+                    <span class="lname">application</span>
+                    <span class="lrole">use cases · ports</span>
+                  </li>
+                  <li>
+                    <span class="lname">domain</span>
+                    <span class="lrole"
+                      >allow-list · value objects · Result</span
+                    >
+                  </li>
+                </ul>
+              </div>
+              <p class="arch__note">
+                Module boundaries are enforced by Nx tags — infrastructure may
+                depend on the application and domain, never the reverse.
+              </p>
+            </div>
+
+            <div class="reveal">
+              <p class="codecap">Request lifecycle</p>
+              <ol class="flow">
+                <li>
+                  <div class="fstep">Validate input</div>
+                  <div class="fsub">Zod parses params, query, and body.</div>
+                </li>
+                <li>
+                  <div class="fstep">Build the value objects</div>
+                  <div class="fsub">RepoRef, GitRef, GitSha, FilePath, …</div>
+                </li>
+                <li data-gate>
+                  <div class="fstep fgate">Check the allow-list</div>
+                  <div class="fsub">
+                    A disallowed repo stops here — 403, before any token or
+                    network call.
+                  </div>
+                </li>
+                <li>
+                  <div class="fstep">Resolve the token</div>
+                  <div class="fsub">
+                    read from the environment, held in memory.
+                  </div>
+                </li>
+                <li>
+                  <div class="fstep">Call GitHub</div>
+                  <div class="fsub">Through the Octokit adapter.</div>
+                </li>
+                <li>
+                  <div class="fstep">Map to a DTO &amp; respond</div>
+                  <div class="fsub">JSON only — no raw payloads.</div>
+                </li>
+              </ol>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- RUN -->
+      <section class="section" id="run">
+        <div class="wrap">
+          <div class="section__head reveal">
+            <p class="eyebrow">Run it</p>
+            <h2>One command in development.</h2>
+            <p>
+              Marlow is local-first. In development it rebuilds and serves; in
+              production it bundles to a single self-contained file.
+            </p>
+          </div>
+
+          <div class="run__grid">
+            <div class="reveal">
+              <p class="codecap">Develop</p>
+              <pre><span class="c"># install workspace dependencies</span>
+pnpm install
+
+<span class="c"># rebuild + serve the API (dev)</span>
+pnpm nx serve marlow-api</pre>
+
+              <p class="codecap">Build &amp; serve</p>
+              <pre><span class="c"># self-contained production bundle</span>
+pnpm nx build marlow-api
+
+<span class="c"># run it (with the env below set)</span>
+node apps/marlow-api/dist/main.js</pre>
+
+              <p class="codecap">Verify</p>
+              <pre>pnpm nx run-many -t typecheck test lint</pre>
+            </div>
+
+            <div class="run__aside reveal">
+              <p>
+                Marlow needs the token at startup and reads it from
+                <code>MARLOW_GITHUB_TOKEN</code>. How it gets there is entirely
+                up to you.
+              </p>
+              <p>
+                Inject it for the process only with
+                <code>pass-cli run -- node …</code>, substitute it from any
+                secret manager, or export it directly — Marlow never spawns a
+                secrets tool itself.
+              </p>
+              <p>
+                Bind address defaults to <span class="kbd">127.0.0.1</span>.
+                Keep it on loopback unless you put your own authentication in
+                front.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- CONFIGURE -->
+      <section class="section" id="config">
+        <div class="wrap">
+          <div class="section__head reveal">
+            <p class="eyebrow">Configure</p>
+            <h2>Everything through the environment.</h2>
+            <p>
+              Configuration is read once at startup. The only credential Marlow
+              needs is <code>MARLOW_GITHUB_TOKEN</code> — provide it however you
+              like. Everything else has a sensible default.
+            </p>
+          </div>
+
+          <div class="scroll reveal">
+            <table>
+              <thead>
+                <tr>
+                  <th class="mono">Variable</th>
+                  <th>Required</th>
+                  <th class="mono">Default</th>
+                  <th>Description</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="mono">MARLOW_GITHUB_TOKEN</td>
+                  <td><span class="req">required</span></td>
+                  <td class="mono"><span class="muted">—</span></td>
+                  <td>GitHub token. Supply it however you like — see below.</td>
+                </tr>
+                <tr>
+                  <td class="mono">MARLOW_HOST</td>
+                  <td><span class="muted">optional</span></td>
+                  <td class="mono">127.0.0.1</td>
+                  <td>Bind address. Keep on loopback by default.</td>
+                </tr>
+                <tr>
+                  <td class="mono">MARLOW_PORT</td>
+                  <td><span class="muted">optional</span></td>
+                  <td class="mono">3000</td>
+                  <td>Port to listen on.</td>
+                </tr>
+                <tr>
+                  <td class="mono">NODE_ENV</td>
+                  <td><span class="muted">optional</span></td>
+                  <td class="mono"><span class="muted">—</span></td>
+                  <td>
+                    <code>production</code> suppresses 5xx detail in responses.
+                  </td>
+                </tr>
+                <tr>
+                  <td class="mono">MARLOW_GITHUB_USER_AGENT</td>
+                  <td><span class="muted">optional</span></td>
+                  <td class="mono">marlow</td>
+                  <td>User agent sent by the Octokit client.</td>
+                </tr>
+                <tr>
+                  <td class="mono">MARLOW_GITHUB_BASE_URL</td>
+                  <td><span class="muted">optional</span></td>
+                  <td class="mono"><span class="muted">—</span></td>
+                  <td>GitHub API base URL, e.g. for GitHub Enterprise.</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="arch__note">
+            Mint the token with its permissions pre-filled. A
+            <a
+              href="https://github.com/settings/personal-access-tokens/new?name=Marlow&amp;description=Least-privilege%20access%20to%20allow-listed%20repos&amp;target_name=nrwl&amp;contents=read&amp;issues=write&amp;pull_requests=write&amp;statuses=read"
+              >fine-grained token</a
+            >
+            is least-privilege — it pre-selects Contents (read), Issues and Pull
+            requests (read/write), and Commit statuses (read) for the
+            <code>nrwl</code> owner; on the page, also add Checks (read) and
+            limit access to <code>nrwl/ocean</code> and <code>nrwl/nx</code>. A
+            <a
+              href="https://github.com/settings/tokens/new?description=Marlow%20GitHub%20API%20broker&amp;scopes=repo"
+              >classic token</a
+            >
+            is simpler but coarser — the single <code>repo</code> scope reaches
+            the private repository on the allow-list.
+          </p>
+          <p class="arch__note">
+            Marlow only reads <code>MARLOW_GITHUB_TOKEN</code> — supply it
+            however you trust:
+          </p>
+          <pre><span class="c"># inject it for the process lifetime via Proton Pass</span>
+pass-cli run -- node apps/marlow-api/dist/main.js
+
+<span class="c"># or substitute from any secret source</span>
+MARLOW_GITHUB_TOKEN="$(pass-cli item view &lt;ref&gt; --field token)" node apps/marlow-api/dist/main.js</pre>
+        </div>
+      </section>
+
+      <!-- API -->
+      <section class="section" id="api">
+        <div class="wrap">
+          <div class="section__head reveal">
+            <p class="eyebrow">API reference</p>
+            <h2>One namespace, scoped to the allow-list.</h2>
+            <p>
+              Every repository route lives under
+              <code>/repos/:owner/:repo</code> and only answers for an
+              allow-listed repository. Errors share one shape:
+              <code>{ "error": { "code", "message", "details?" } }</code>.
+            </p>
+          </div>
+
+          <div class="scroll reveal">
+            <table>
+              <thead>
+                <tr>
+                  <th>Method</th>
+                  <th class="mono">Endpoint</th>
+                  <th>Does</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td><span class="verb">GET</span></td>
+                  <td class="mono">/openapi.json</td>
+                  <td>OpenAPI 3.1 description of this API — runtime discovery.</td>
+                </tr>
+                <tr>
+                  <td><span class="verb">GET</span></td>
+                  <td class="mono">/health</td>
+                  <td>Liveness check.</td>
+                </tr>
+                <tr>
+                  <td><span class="verb">GET</span></td>
+                  <td class="mono">/repos</td>
+                  <td>List the allow-listed repositories.</td>
+                </tr>
+                <tr>
+                  <td><span class="verb">GET</span></td>
+                  <td class="mono">/repos/:owner/:repo/permissions</td>
+                  <td>Token's permission level on the repo.</td>
+                </tr>
+                <tr>
+                  <td><span class="verb">GET</span></td>
+                  <td class="mono">/repos/:owner/:repo/tree</td>
+                  <td>
+                    List the tree at a ref (<code>?ref=&amp;recursive=</code>).
+                  </td>
+                </tr>
+                <tr>
+                  <td><span class="verb">GET</span></td>
+                  <td class="mono">/repos/:owner/:repo/contents/*</td>
+                  <td>Read a file (<code>?ref=</code>).</td>
+                </tr>
+                <tr>
+                  <td><span class="verb">GET</span></td>
+                  <td class="mono">/repos/:owner/:repo/search/code</td>
+                  <td>
+                    Search code, scoped to the repo (<code>?query=</code>).
+                  </td>
+                </tr>
+                <tr>
+                  <td><span class="verb">GET</span></td>
+                  <td class="mono">/repos/:owner/:repo/commits</td>
+                  <td>List commits (<code>?ref=&amp;path=</code>).</td>
+                </tr>
+                <tr>
+                  <td><span class="verb">GET</span></td>
+                  <td class="mono">/repos/:owner/:repo/commits/:sha</td>
+                  <td>A commit with stats and files.</td>
+                </tr>
+                <tr>
+                  <td><span class="verb">GET</span></td>
+                  <td class="mono">/repos/:owner/:repo/issues</td>
+                  <td>List issues (<code>?state=</code>).</td>
+                </tr>
+                <tr>
+                  <td><span class="verb">GET</span></td>
+                  <td class="mono">/repos/:owner/:repo/issues/:n</td>
+                  <td>Get one issue.</td>
+                </tr>
+                <tr>
+                  <td><span class="verb verb--post">POST</span></td>
+                  <td class="mono">
+                    /repos/:owner/:repo/issues
+                    <span class="dot" title="requires confirm: true"></span>
+                  </td>
+                  <td>Create an issue. <span class="req">confirm</span></td>
+                </tr>
+                <tr>
+                  <td><span class="verb verb--post">POST</span></td>
+                  <td class="mono">
+                    /repos/:owner/:repo/issues/:n/close
+                    <span class="dot"></span>
+                  </td>
+                  <td>Close an issue. <span class="req">confirm</span></td>
+                </tr>
+                <tr>
+                  <td><span class="verb">GET</span></td>
+                  <td class="mono">/repos/:owner/:repo/issues/:n/comments</td>
+                  <td>List issue comments.</td>
+                </tr>
+                <tr>
+                  <td><span class="verb verb--post">POST</span></td>
+                  <td class="mono">
+                    /repos/:owner/:repo/issues/:n/comments
+                    <span class="dot"></span>
+                  </td>
+                  <td>Comment on an issue. <span class="req">confirm</span></td>
+                </tr>
+                <tr>
+                  <td><span class="verb">GET</span></td>
+                  <td class="mono">/repos/:owner/:repo/pulls</td>
+                  <td>List pull requests (<code>?state=</code>).</td>
+                </tr>
+                <tr>
+                  <td><span class="verb">GET</span></td>
+                  <td class="mono">/repos/:owner/:repo/pulls/:n</td>
+                  <td>Get one pull request.</td>
+                </tr>
+                <tr>
+                  <td><span class="verb verb--post">POST</span></td>
+                  <td class="mono">
+                    /repos/:owner/:repo/pulls <span class="dot"></span>
+                  </td>
+                  <td>Open a pull request. <span class="req">confirm</span></td>
+                </tr>
+                <tr>
+                  <td><span class="verb verb--post">POST</span></td>
+                  <td class="mono">
+                    /repos/:owner/:repo/pulls/:n/close <span class="dot"></span>
+                  </td>
+                  <td>
+                    Close a pull request. <span class="req">confirm</span>
+                  </td>
+                </tr>
+                <tr>
+                  <td><span class="verb verb--post">PATCH</span></td>
+                  <td class="mono">
+                    /repos/:owner/:repo/pulls/:n <span class="dot"></span>
+                  </td>
+                  <td>
+                    Update a pull request (title, body, base).
+                    <span class="req">confirm</span>
+                  </td>
+                </tr>
+                <tr>
+                  <td><span class="verb">GET</span></td>
+                  <td class="mono">/repos/:owner/:repo/pulls/:n/files</td>
+                  <td>Files changed in a pull request.</td>
+                </tr>
+                <tr>
+                  <td><span class="verb">GET</span></td>
+                  <td class="mono">/repos/:owner/:repo/pulls/:n/commits</td>
+                  <td>Commits in a pull request.</td>
+                </tr>
+                <tr>
+                  <td><span class="verb">GET</span></td>
+                  <td class="mono">/repos/:owner/:repo/pulls/:n/comments</td>
+                  <td>Conversation comments on a pull request.</td>
+                </tr>
+                <tr>
+                  <td><span class="verb">GET</span></td>
+                  <td class="mono">/repos/:owner/:repo/commit-status</td>
+                  <td>Combined commit status (<code>?ref=</code>).</td>
+                </tr>
+                <tr>
+                  <td><span class="verb">GET</span></td>
+                  <td class="mono">/repos/:owner/:repo/check-runs</td>
+                  <td>Check runs for a ref (<code>?ref=</code>).</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="legend">
+            <span class="dot"></span> write · requires
+            <code>{ "confirm": true }</code>
+          </p>
+        </div>
+      </section>
+    </main>
+
+    <footer class="foot">
+      <div class="wrap foot__in">
+        <h2>A narrow door, held open on purpose.</h2>
+        <div class="foot__meta">
+          <span>Marlow · local GitHub API broker</span>
+          <span>Nx · TypeScript · Fastify · Octokit · Zod</span>
+          <span>Runs on your machine. Nothing leaves it.</span>
+        </div>
+      </div>
+    </footer>
+
+    <script>
+      (function () {
+        var reduce = window.matchMedia(
+          '(prefers-reduced-motion: reduce)',
+        ).matches;
+        var items = document.querySelectorAll('.reveal');
+        if (reduce || !('IntersectionObserver' in window)) {
+          items.forEach(function (el) {
+            el.classList.add('in');
+          });
+          return;
+        }
+        var io = new IntersectionObserver(
+          function (entries) {
+            entries.forEach(function (e) {
+              if (e.isIntersecting) {
+                e.target.classList.add('in');
+                io.unobserve(e.target);
+              }
+            });
+          },
+          { rootMargin: '0px 0px -10% 0px', threshold: 0.08 },
+        );
+        items.forEach(function (el) {
+          io.observe(el);
+        });
+      })();
+    </script>
+  </body>
+</html>

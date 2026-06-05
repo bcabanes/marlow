@@ -1,0 +1,28 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compileOnSave": false,
+  "files": [],
+  "references": [
+    {
+      "path": "./libs/marlow/domain"
+    },
+    {
+      "path": "./libs/marlow/application"
+    },
+    {
+      "path": "./libs/marlow/infrastructure-github"
+    },
+    {
+      "path": "./libs/marlow/infrastructure-credentials"
+    },
+    {
+      "path": "./libs/marlow/api-contracts"
+    },
+    {
+      "path": "./libs/marlow/api-errors"
+    },
+    {
+      "path": "./apps/marlow-api"
+    }
+  ]
+}

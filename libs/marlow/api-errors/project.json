@@ -1,0 +1,9 @@
+{
+  "name": "marlow-api-errors",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/marlow/api-errors/src",
+  "projectType": "library",
+  "tags": ["type:util", "scope:marlow"],
+  "// targets": "to see all targets run: nx show project marlow-api-errors --web",
+  "targets": {}
+}

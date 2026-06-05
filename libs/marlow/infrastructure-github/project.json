@@ -1,0 +1,9 @@
+{
+  "name": "marlow-infrastructure-github",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/marlow/infrastructure-github/src",
+  "projectType": "library",
+  "tags": ["type:infrastructure", "scope:marlow"],
+  "// targets": "to see all targets run: nx show project marlow-infrastructure-github --web",
+  "targets": {}
+}

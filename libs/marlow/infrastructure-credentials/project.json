@@ -1,0 +1,9 @@
+{
+  "name": "marlow-infrastructure-credentials",
+  "$schema": "../../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "libs/marlow/infrastructure-credentials/src",
+  "projectType": "library",
+  "tags": ["type:infrastructure", "scope:marlow"],
+  "// targets": "to see all targets run: nx show project marlow-infrastructure-credentials --web",
+  "targets": {}
+}
