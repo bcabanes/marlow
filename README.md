@@ -212,7 +212,8 @@ Endpoints marked **confirm** require `{ "confirm": true }` in the request body.
 List endpoints return trimmed rows to keep responses small for an LLM: issues
 and pull requests omit the `body`, and commits carry only the subject line
 (`messageHeadline`). Fetch a single issue, pull request, or commit to get the
-full body or message.
+full body or message. Paginated lists default to 30 rows per page (`perPage`,
+max 100).
 
 ## Built with
 

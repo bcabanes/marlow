@@ -7,10 +7,15 @@ export const repoParamsSchema = z.object({
 });
 export type RepoParams = z.infer<typeof repoParamsSchema>;
 
-/** Shared pagination query parameters (coerced from query strings). */
+/**
+ * Shared pagination query parameters (coerced from query strings).
+ *
+ * `perPage` defaults to 30 so list responses have a predictable, bounded size
+ * rather than relying on GitHub's implicit default.
+ */
 export const paginationQuerySchema = z.object({
   page: z.coerce.number().int().min(1).optional(),
-  perPage: z.coerce.number().int().min(1).max(100).optional(),
+  perPage: z.coerce.number().int().min(1).max(100).default(30),
 });
 export type PaginationQuery = z.infer<typeof paginationQuerySchema>;
 

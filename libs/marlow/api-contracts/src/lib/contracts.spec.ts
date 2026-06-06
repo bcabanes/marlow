@@ -30,6 +30,14 @@ describe('paginationQuerySchema', () => {
       false,
     );
   });
+
+  it('defaults perPage to 30 when omitted', () => {
+    expect(paginationQuerySchema.parse({})).toEqual({ perPage: 30 });
+    expect(paginationQuerySchema.parse({ page: '2' })).toEqual({
+      page: 2,
+      perPage: 30,
+    });
+  });
 });
 
 describe('treeQuerySchema', () => {

@@ -42,7 +42,7 @@ const param = (
 // --- reusable schema fragments (mirror api-contracts) ---
 const nonEmptyString = { type: 'string', minLength: 1 };
 const positiveInt = { type: 'integer', minimum: 1 };
-const perPageInt = { type: 'integer', minimum: 1, maximum: 100 };
+const perPageInt = { type: 'integer', minimum: 1, maximum: 100, default: 30 };
 const stateSchema = { type: 'string', enum: ['open', 'closed', 'all'] };
 
 // --- path parameter groups ---
