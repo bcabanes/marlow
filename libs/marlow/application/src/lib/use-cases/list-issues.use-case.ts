@@ -1,5 +1,5 @@
 import { DomainError, Result, ok } from '@org/marlow-domain';
-import { Issue, IssueState } from '../dtos.js';
+import { IssueState, IssueSummary } from '../dtos.js';
 import { GitHubRepositoryPort } from '../ports/github-repository.port.js';
 import { resolveAllowedRepo } from '../resolve-allowed-repo.js';
 
@@ -15,7 +15,7 @@ export const listIssues =
   (github: GitHubRepositoryPort) =>
   async (
     input: ListIssuesInput,
-  ): Promise<Result<readonly Issue[], DomainError>> => {
+  ): Promise<Result<readonly IssueSummary[], DomainError>> => {
     const repo = resolveAllowedRepo(input.owner, input.repo);
     if (!repo.ok) return repo;
     return ok(

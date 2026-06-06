@@ -1,5 +1,5 @@
 import { DomainError, Result, ok } from '@org/marlow-domain';
-import { PullRequest, PullRequestState } from '../dtos.js';
+import { PullRequestState, PullRequestSummary } from '../dtos.js';
 import { GitHubRepositoryPort } from '../ports/github-repository.port.js';
 import { resolveAllowedRepo } from '../resolve-allowed-repo.js';
 
@@ -15,7 +15,7 @@ export const listPullRequests =
   (github: GitHubRepositoryPort) =>
   async (
     input: ListPullRequestsInput,
-  ): Promise<Result<readonly PullRequest[], DomainError>> => {
+  ): Promise<Result<readonly PullRequestSummary[], DomainError>> => {
     const repo = resolveAllowedRepo(input.owner, input.repo);
     if (!repo.ok) return repo;
     return ok(

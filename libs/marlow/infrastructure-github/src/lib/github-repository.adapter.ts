@@ -7,15 +7,17 @@ import {
   mapCodeSearch,
   mapCombinedStatus,
   mapCommitDetail,
-  mapCommitSummary,
+  mapCommitListItem,
   mapFileContents,
   mapIssue,
   mapIssueComment,
+  mapIssueSummary,
   mapLabelSet,
   mapMilestoneResult,
   mapPermissionCheck,
   mapPullRequest,
   mapPullRequestFile,
+  mapPullRequestSummary,
   mapTree,
 } from './github-dto-mapper.js';
 
@@ -108,7 +110,7 @@ export const createGitHubRepositoryAdapter = (
           ...(page === undefined ? {} : { page }),
           ...(perPage === undefined ? {} : { per_page: perPage }),
         });
-        return data.map(mapCommitSummary);
+        return data.map(mapCommitListItem);
       }),
 
     getCommit: ({ repo, sha }) =>
@@ -133,7 +135,7 @@ export const createGitHubRepositoryAdapter = (
         // listForRepo also returns pull requests; exclude them.
         return data
           .filter((issue) => issue.pull_request === undefined)
-          .map(mapIssue);
+          .map(mapIssueSummary);
       }),
 
     getIssue: ({ repo, issueNumber }) =>
@@ -215,7 +217,7 @@ export const createGitHubRepositoryAdapter = (
           ...(page === undefined ? {} : { page }),
           ...(perPage === undefined ? {} : { per_page: perPage }),
         });
-        return data.map(mapPullRequest);
+        return data.map(mapPullRequestSummary);
       }),
 
     getPullRequest: ({ repo, pullNumber }) =>
@@ -287,7 +289,7 @@ export const createGitHubRepositoryAdapter = (
           ...(page === undefined ? {} : { page }),
           ...(perPage === undefined ? {} : { per_page: perPage }),
         });
-        return data.map(mapCommitSummary);
+        return data.map(mapCommitListItem);
       }),
 
     listPullRequestComments: ({ repo, pullNumber, page, perPage }) =>

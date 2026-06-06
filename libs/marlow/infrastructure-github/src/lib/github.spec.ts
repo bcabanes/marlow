@@ -111,6 +111,28 @@ describe('createGitHubRepositoryAdapter', () => {
     expect(issues.map((issue) => issue.number)).toEqual([1, 3]);
   });
 
+  it('returns body-less issue summaries that never leak raw fields', async () => {
+    const listForRepo = vi.fn().mockResolvedValue({
+      data: [
+        {
+          ...baseIssue(5),
+          body: 'a long body that should not ride along in a list response',
+          secret_internal_field: 'should-not-appear',
+        },
+      ],
+    });
+    const octokit = {
+      rest: { issues: { listForRepo } },
+    } as unknown as Octokit;
+    const adapter = createGitHubRepositoryAdapter(octokit);
+
+    const issues = await adapter.listIssues({ repo, state: 'open' });
+
+    expect(issues[0]).not.toHaveProperty('body');
+    expect(JSON.stringify(issues)).not.toContain('secret_internal_field');
+    expect(JSON.stringify(issues)).not.toContain('a long body');
+  });
+
   it('converts provider errors into GitHubPortError', async () => {
     const get = vi.fn().mockRejectedValue(requestError(404));
     const octokit = { rest: { issues: { get } } } as unknown as Octokit;
@@ -278,6 +300,37 @@ describe('createGitHubRepositoryAdapter', () => {
     expect(pull.labels).toEqual(['wip']);
     expect(pull.assignees).toEqual(['hubot']);
     expect(pull.milestone).toEqual({ number: 1, title: 'v1' });
+  });
+
+  it('reduces each listed commit message to its subject headline', async () => {
+    const actor = {
+      name: 'Octo',
+      email: 'octo@example.com',
+      date: '2020-01-01T00:00:00Z',
+    };
+    const listCommits = vi.fn().mockResolvedValue({
+      data: [
+        {
+          sha: 'abc123',
+          commit: {
+            message:
+              'Fix the thing\n\nA long explanatory body that should not appear in a list.',
+            author: actor,
+            committer: actor,
+          },
+        },
+      ],
+    });
+    const octokit = {
+      rest: { repos: { listCommits } },
+    } as unknown as Octokit;
+    const adapter = createGitHubRepositoryAdapter(octokit);
+
+    const commits = await adapter.listCommits({ repo });
+
+    expect(commits[0].messageHeadline).toBe('Fix the thing');
+    expect(commits[0]).not.toHaveProperty('message');
+    expect(JSON.stringify(commits)).not.toContain('explanatory body');
   });
 });
 

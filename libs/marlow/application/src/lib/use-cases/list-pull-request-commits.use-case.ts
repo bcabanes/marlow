@@ -4,7 +4,7 @@ import {
   createPullRequestNumber,
   ok,
 } from '@org/marlow-domain';
-import { CommitSummary } from '../dtos.js';
+import { CommitListItem } from '../dtos.js';
 import { GitHubRepositoryPort } from '../ports/github-repository.port.js';
 import { resolveAllowedRepo } from '../resolve-allowed-repo.js';
 
@@ -20,7 +20,7 @@ export const listPullRequestCommits =
   (github: GitHubRepositoryPort) =>
   async (
     input: ListPullRequestCommitsInput,
-  ): Promise<Result<readonly CommitSummary[], DomainError>> => {
+  ): Promise<Result<readonly CommitListItem[], DomainError>> => {
     const repo = resolveAllowedRepo(input.owner, input.repo);
     if (!repo.ok) return repo;
     const pullNumber = createPullRequestNumber(input.pullNumber);

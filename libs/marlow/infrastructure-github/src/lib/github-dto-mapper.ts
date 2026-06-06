@@ -5,17 +5,20 @@ import {
   CodeSearchResult,
   CombinedStatus,
   CommitDetail,
+  CommitListItem,
   CommitSummary,
   FileContents,
   GitActor,
   Issue,
   IssueComment,
+  IssueSummary,
   LabelSet,
   MilestoneRef,
   MilestoneResult,
   PermissionCheck,
   PullRequest,
   PullRequestFile,
+  PullRequestSummary,
   TreeEntryType,
   TreeResult,
 } from '@org/marlow-application';
@@ -139,6 +142,9 @@ const extractMilestone = (
     ? null
     : { number: milestone.number, title: milestone.title };
 
+// The subject line of a commit message: everything before the first newline.
+const headline = (message: string): string => message.split('\n', 1)[0];
+
 export const mapPermissionCheck = (data: RepoGetData): PermissionCheck => {
   const canAdmin = data.permissions?.admin ?? false;
   const canWrite = data.permissions?.push ?? false;
@@ -194,6 +200,13 @@ export const mapCommitSummary = (data: GhCommitLike): CommitSummary => ({
   committer: mapActor(data.commit.committer),
 });
 
+export const mapCommitListItem = (data: GhCommitLike): CommitListItem => ({
+  sha: data.sha,
+  messageHeadline: headline(data.commit.message),
+  author: mapActor(data.commit.author),
+  committer: mapActor(data.commit.committer),
+});
+
 export const mapCommitDetail = (data: CommitGetData): CommitDetail => ({
   ...mapCommitSummary(data),
   stats: {
@@ -210,11 +223,10 @@ export const mapCommitDetail = (data: CommitGetData): CommitDetail => ({
   })),
 });
 
-export const mapIssue = (data: GhIssueLike): Issue => ({
+export const mapIssueSummary = (data: GhIssueLike): IssueSummary => ({
   number: data.number,
   title: data.title,
   state: data.state,
-  body: data.body ?? null,
   author: data.user?.login ?? null,
   labels: extractLabelNames(data.labels),
   assignees: extractAssigneeLogins(data.assignees),
@@ -222,6 +234,11 @@ export const mapIssue = (data: GhIssueLike): Issue => ({
   commentCount: data.comments,
   createdAt: data.created_at,
   updatedAt: data.updated_at,
+});
+
+export const mapIssue = (data: GhIssueLike): Issue => ({
+  ...mapIssueSummary(data),
+  body: data.body ?? null,
 });
 
 export const mapIssueComment = (data: GhCommentLike): IssueComment => ({
@@ -232,11 +249,12 @@ export const mapIssueComment = (data: GhCommentLike): IssueComment => ({
   updatedAt: data.updated_at,
 });
 
-export const mapPullRequest = (data: GhPullLike): PullRequest => ({
+export const mapPullRequestSummary = (
+  data: GhPullLike,
+): PullRequestSummary => ({
   number: data.number,
   title: data.title,
   state: data.state,
-  body: data.body ?? null,
   author: data.user?.login ?? null,
   headRef: data.head.ref,
   baseRef: data.base.ref,
@@ -247,6 +265,11 @@ export const mapPullRequest = (data: GhPullLike): PullRequest => ({
   milestone: extractMilestone(data.milestone),
   createdAt: data.created_at,
   updatedAt: data.updated_at,
+});
+
+export const mapPullRequest = (data: GhPullLike): PullRequest => ({
+  ...mapPullRequestSummary(data),
+  body: data.body ?? null,
 });
 
 export const mapPullRequestFile = (data: PullFileItem): PullRequestFile => ({

@@ -98,11 +98,25 @@ export interface CommitDetail extends CommitSummary {
   readonly files: readonly CommitFile[];
 }
 
-export interface Issue {
+/**
+ * A commit as it appears in a list: the message is reduced to its subject
+ * headline (the first line). Fetch a single commit for the full message.
+ */
+export interface CommitListItem {
+  readonly sha: string;
+  readonly messageHeadline: string;
+  readonly author: GitActor | null;
+  readonly committer: GitActor | null;
+}
+
+/**
+ * An issue as it appears in a list: everything except the (potentially large)
+ * body. Fetch a single issue to get the body.
+ */
+export interface IssueSummary {
   readonly number: number;
   readonly title: string;
   readonly state: string;
-  readonly body: string | null;
   readonly author: string | null;
   readonly labels: readonly string[];
   readonly assignees: readonly string[];
@@ -110,6 +124,11 @@ export interface Issue {
   readonly commentCount: number;
   readonly createdAt: string;
   readonly updatedAt: string;
+}
+
+/** A full issue, including the body. Returned by single-issue reads and writes. */
+export interface Issue extends IssueSummary {
+  readonly body: string | null;
 }
 
 export interface IssueComment {
@@ -143,11 +162,14 @@ export interface MilestoneResult {
   readonly milestone: MilestoneRef | null;
 }
 
-export interface PullRequest {
+/**
+ * A pull request as it appears in a list: everything except the (potentially
+ * large) body. Fetch a single pull request to get the body.
+ */
+export interface PullRequestSummary {
   readonly number: number;
   readonly title: string;
   readonly state: string;
-  readonly body: string | null;
   readonly author: string | null;
   readonly headRef: string;
   readonly baseRef: string;
@@ -158,6 +180,14 @@ export interface PullRequest {
   readonly milestone: MilestoneRef | null;
   readonly createdAt: string;
   readonly updatedAt: string;
+}
+
+/**
+ * A full pull request, including the body. Returned by single-PR reads and
+ * writes.
+ */
+export interface PullRequest extends PullRequestSummary {
+  readonly body: string | null;
 }
 
 export interface PullRequestFile {

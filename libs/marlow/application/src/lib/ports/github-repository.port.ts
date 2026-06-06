@@ -12,12 +12,13 @@ import {
   CodeSearchResult,
   CombinedStatus,
   CommitDetail,
-  CommitSummary,
+  CommitListItem,
   FileContents,
   Issue,
   IssueComment,
   IssueState,
   IssueStateReason,
+  IssueSummary,
   LabelSet,
   MilestoneResult,
   Pagination,
@@ -25,6 +26,7 @@ import {
   PullRequest,
   PullRequestFile,
   PullRequestState,
+  PullRequestSummary,
   TreeResult,
 } from '../dtos.js';
 
@@ -63,7 +65,7 @@ export interface GitHubRepositoryPort {
       readonly ref?: GitRef;
       readonly path?: FilePath;
     } & Pagination,
-  ): Promise<readonly CommitSummary[]>;
+  ): Promise<readonly CommitListItem[]>;
 
   getCommit(input: {
     readonly repo: RepoRef;
@@ -75,7 +77,7 @@ export interface GitHubRepositoryPort {
       readonly repo: RepoRef;
       readonly state: IssueState;
     } & Pagination,
-  ): Promise<readonly Issue[]>;
+  ): Promise<readonly IssueSummary[]>;
 
   getIssue(input: {
     readonly repo: RepoRef;
@@ -121,7 +123,7 @@ export interface GitHubRepositoryPort {
       readonly repo: RepoRef;
       readonly state: PullRequestState;
     } & Pagination,
-  ): Promise<readonly PullRequest[]>;
+  ): Promise<readonly PullRequestSummary[]>;
 
   getPullRequest(input: {
     readonly repo: RepoRef;
@@ -162,7 +164,7 @@ export interface GitHubRepositoryPort {
       readonly repo: RepoRef;
       readonly pullNumber: PullRequestNumber;
     } & Pagination,
-  ): Promise<readonly CommitSummary[]>;
+  ): Promise<readonly CommitListItem[]>;
 
   listPullRequestComments(
     input: {

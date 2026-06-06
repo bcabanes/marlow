@@ -7,7 +7,7 @@ import {
   createGitRef,
   ok,
 } from '@org/marlow-domain';
-import { CommitSummary } from '../dtos.js';
+import { CommitListItem } from '../dtos.js';
 import { GitHubRepositoryPort } from '../ports/github-repository.port.js';
 import { resolveAllowedRepo } from '../resolve-allowed-repo.js';
 
@@ -24,7 +24,7 @@ export const listCommits =
   (github: GitHubRepositoryPort) =>
   async (
     input: ListCommitsInput,
-  ): Promise<Result<readonly CommitSummary[], DomainError>> => {
+  ): Promise<Result<readonly CommitListItem[], DomainError>> => {
     const repo = resolveAllowedRepo(input.owner, input.repo);
     if (!repo.ok) return repo;
     let ref: GitRef | undefined;

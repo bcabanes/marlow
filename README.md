@@ -175,9 +175,9 @@ runtime.
 | GET    | `/repos/:owner/:repo/tree?ref=&recursive=`         | List the tree at a ref          |
 | GET    | `/repos/:owner/:repo/contents/*?ref=`              | Read a file                     |
 | GET    | `/repos/:owner/:repo/search/code?query=`           | Search code, scoped to the repo |
-| GET    | `/repos/:owner/:repo/commits?ref=&path=`           | List commits                    |
+| GET    | `/repos/:owner/:repo/commits?ref=&path=`           | List commits (subject line only) |
 | GET    | `/repos/:owner/:repo/commits/:sha`                 | A commit with stats and files   |
-| GET    | `/repos/:owner/:repo/issues?state=`                | List issues                     |
+| GET    | `/repos/:owner/:repo/issues?state=`                | List issues (summaries, no body) |
 | GET    | `/repos/:owner/:repo/issues/:issueNumber`          | Get one issue                   |
 | POST   | `/repos/:owner/:repo/issues`                       | Create an issue · **confirm**   |
 | POST   | `/repos/:owner/:repo/issues/:issueNumber/close`    | Close an issue · **confirm**    |
@@ -190,7 +190,7 @@ runtime.
 | DELETE | `/repos/:owner/:repo/issues/:issueNumber/assignees` | Remove assignees from an issue · **confirm** |
 | PUT    | `/repos/:owner/:repo/issues/:issueNumber/milestone` | Set an issue's milestone · **confirm** |
 | DELETE | `/repos/:owner/:repo/issues/:issueNumber/milestone` | Clear an issue's milestone · **confirm** |
-| GET    | `/repos/:owner/:repo/pulls?state=`                 | List pull requests              |
+| GET    | `/repos/:owner/:repo/pulls?state=`                 | List pull requests (summaries, no body) |
 | GET    | `/repos/:owner/:repo/pulls/:pullNumber`            | Get one pull request            |
 | POST   | `/repos/:owner/:repo/pulls`                        | Open a pull request · **confirm** |
 | POST   | `/repos/:owner/:repo/pulls/:pullNumber/close`      | Close a pull request · **confirm** |
@@ -208,6 +208,11 @@ runtime.
 | GET    | `/repos/:owner/:repo/check-runs?ref=`              | Check runs for a ref            |
 
 Endpoints marked **confirm** require `{ "confirm": true }` in the request body.
+
+List endpoints return trimmed rows to keep responses small for an LLM: issues
+and pull requests omit the `body`, and commits carry only the subject line
+(`messageHeadline`). Fetch a single issue, pull request, or commit to get the
+full body or message.
 
 ## Built with
 
