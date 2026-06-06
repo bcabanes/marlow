@@ -215,6 +215,17 @@ and pull requests omit the `body`, and commits carry only the subject line
 full body or message. Paginated lists default to 30 rows per page (`perPage`,
 max 100).
 
+### Discovery for agents
+
+`GET /openapi.json` is the full, self-describing schema, but it is ~25 KB — a
+recurring cost for an agent that re-fetches it every session. For routine use,
+paste [`docs/agent-cheatsheet.md`](docs/agent-cheatsheet.md) into the agent's
+always-loaded instructions (for example a global `CLAUDE.md`): it lists every
+route on one line, so the agent rides the prompt cache and only fetches
+`/openapi.json` for the details a cheat-sheet line doesn't cover. The cheat-sheet
+is generated from the same route table as the OpenAPI document and guarded by a
+test, so the two can't drift.
+
 ## Built with
 
 | Tool       | Role                                                              |
