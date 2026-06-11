@@ -25,6 +25,7 @@ import {
   PermissionCheck,
   PullRequest,
   PullRequestFile,
+  PullRequestReview,
   PullRequestState,
   PullRequestSummary,
   TreeResult,
@@ -172,6 +173,13 @@ export interface GitHubRepositoryPort {
       readonly pullNumber: PullRequestNumber;
     } & Pagination,
   ): Promise<readonly IssueComment[]>;
+
+  listPullRequestReviews(
+    input: {
+      readonly repo: RepoRef;
+      readonly pullNumber: PullRequestNumber;
+    } & Pagination,
+  ): Promise<readonly PullRequestReview[]>;
 
   // Labels, assignees, and milestone are managed through GitHub's issues API
   // for both issues and pull requests: a pull request's number is its issue

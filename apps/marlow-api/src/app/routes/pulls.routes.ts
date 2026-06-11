@@ -8,6 +8,7 @@ import {
   listPullRequestComments,
   listPullRequestCommits,
   listPullRequestFiles,
+  listPullRequestReviews,
   listPullRequests,
   removeAssignees,
   removeLabel,
@@ -157,6 +158,26 @@ export const registerPullsRoutes = (
       const port = await deps.getGitHubPort();
       return unwrapResult(
         await listPullRequestComments(port)({
+          owner,
+          repo,
+          pullNumber,
+          page,
+          perPage,
+        }),
+      );
+    },
+  );
+
+  fastify.get(
+    '/repos/:owner/:repo/pulls/:pullNumber/reviews',
+    async (request) => {
+      const { owner, repo, pullNumber } = pullNumberParamsSchema.parse(
+        request.params,
+      );
+      const { page, perPage } = paginationQuerySchema.parse(request.query);
+      const port = await deps.getGitHubPort();
+      return unwrapResult(
+        await listPullRequestReviews(port)({
           owner,
           repo,
           pullNumber,

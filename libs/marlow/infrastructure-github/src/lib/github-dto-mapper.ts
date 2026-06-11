@@ -18,6 +18,7 @@ import {
   PermissionCheck,
   PullRequest,
   PullRequestFile,
+  PullRequestReview,
   PullRequestSummary,
   TreeEntryType,
   TreeResult,
@@ -57,6 +58,7 @@ interface GhCommitLike {
 
 type GhLabel = string | { readonly name?: string | null };
 type GhAssignee = { readonly login: string } | null;
+type GhTeam = { readonly slug: string } | null;
 type GhMilestone = { readonly number: number; readonly title: string } | null;
 
 interface GhIssueLike {
@@ -102,9 +104,19 @@ interface GhPullLike {
   readonly merged_at: string | null;
   readonly labels?: ReadonlyArray<GhLabel>;
   readonly assignees?: ReadonlyArray<GhAssignee> | null;
+  readonly requested_reviewers?: ReadonlyArray<GhAssignee> | null;
+  readonly requested_teams?: ReadonlyArray<GhTeam> | null;
   readonly milestone?: GhMilestone;
   readonly created_at: string;
   readonly updated_at: string;
+}
+
+interface GhReviewLike {
+  readonly id: number;
+  readonly user: { readonly login: string } | null;
+  readonly state: string;
+  readonly body?: string | null;
+  readonly submitted_at?: string | null;
 }
 
 export interface GhFileContent {
@@ -134,6 +146,13 @@ const extractAssigneeLogins = (
   (assignees ?? [])
     .map((assignee) => assignee?.login ?? null)
     .filter((login): login is string => login !== null);
+
+const extractTeamSlugs = (
+  teams: ReadonlyArray<GhTeam> | null | undefined,
+): readonly string[] =>
+  (teams ?? [])
+    .map((team) => team?.slug ?? null)
+    .filter((slug): slug is string => slug !== null);
 
 const extractMilestone = (
   milestone: GhMilestone | undefined,
@@ -262,6 +281,8 @@ export const mapPullRequestSummary = (
   merged: data.merged ?? data.merged_at != null,
   labels: extractLabelNames(data.labels ?? []),
   assignees: extractAssigneeLogins(data.assignees),
+  requestedReviewers: extractAssigneeLogins(data.requested_reviewers),
+  requestedTeams: extractTeamSlugs(data.requested_teams),
   milestone: extractMilestone(data.milestone),
   createdAt: data.created_at,
   updatedAt: data.updated_at,
@@ -270,6 +291,16 @@ export const mapPullRequestSummary = (
 export const mapPullRequest = (data: GhPullLike): PullRequest => ({
   ...mapPullRequestSummary(data),
   body: data.body ?? null,
+});
+
+export const mapPullRequestReview = (
+  data: GhReviewLike,
+): PullRequestReview => ({
+  id: data.id,
+  author: data.user?.login ?? null,
+  state: data.state,
+  body: data.body ?? null,
+  submittedAt: data.submitted_at ?? null,
 });
 
 export const mapPullRequestFile = (data: PullFileItem): PullRequestFile => ({

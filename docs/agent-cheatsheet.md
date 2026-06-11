@@ -49,6 +49,7 @@ PATCH /repos/{owner}/{repo}/pulls/{pullNumber} body{confirm,title?,body?,base?} 
 GET /repos/{owner}/{repo}/pulls/{pullNumber}/files ?page,perPage -> PullRequestFile[]
 GET /repos/{owner}/{repo}/pulls/{pullNumber}/commits ?page,perPage -> CommitListItem[]
 GET /repos/{owner}/{repo}/pulls/{pullNumber}/comments ?page,perPage -> IssueComment[]
+GET /repos/{owner}/{repo}/pulls/{pullNumber}/reviews ?page,perPage -> PullRequestReview[]
 POST /repos/{owner}/{repo}/pulls/{pullNumber}/labels body{confirm,labels} -> LabelSet
 DELETE /repos/{owner}/{repo}/pulls/{pullNumber}/labels/{name} body{confirm} -> LabelSet
 POST /repos/{owner}/{repo}/pulls/{pullNumber}/assignees body{confirm,assignees} -> AssigneeSet

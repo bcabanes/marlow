@@ -17,6 +17,7 @@ import {
   mapPermissionCheck,
   mapPullRequest,
   mapPullRequestFile,
+  mapPullRequestReview,
   mapPullRequestSummary,
   mapTree,
 } from './github-dto-mapper.js';
@@ -303,6 +304,18 @@ export const createGitHubRepositoryAdapter = (
           ...(perPage === undefined ? {} : { per_page: perPage }),
         });
         return data.map(mapIssueComment);
+      }),
+
+    listPullRequestReviews: ({ repo, pullNumber, page, perPage }) =>
+      call(async () => {
+        const { data } = await octokit.rest.pulls.listReviews({
+          owner: repo.owner,
+          repo: repo.repo,
+          pull_number: pullNumber,
+          ...(page === undefined ? {} : { page }),
+          ...(perPage === undefined ? {} : { per_page: perPage }),
+        });
+        return data.map(mapPullRequestReview);
       }),
 
     addLabels: ({ repo, issueNumber, labels }) =>

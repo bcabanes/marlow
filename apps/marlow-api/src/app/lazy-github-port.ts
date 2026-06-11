@@ -47,6 +47,8 @@ export const createLazyGitHubPort = (
     resolve().then((p) => p.listPullRequestCommits(input)),
   listPullRequestComments: (input) =>
     resolve().then((p) => p.listPullRequestComments(input)),
+  listPullRequestReviews: (input) =>
+    resolve().then((p) => p.listPullRequestReviews(input)),
   getCombinedStatus: (input) =>
     resolve().then((p) => p.getCombinedStatus(input)),
   listCheckRuns: (input) => resolve().then((p) => p.listCheckRuns(input)),

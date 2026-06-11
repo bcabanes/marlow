@@ -33,5 +33,6 @@ export * from './lib/use-cases/update-pull-request.use-case.js';
 export * from './lib/use-cases/list-pull-request-files.use-case.js';
 export * from './lib/use-cases/list-pull-request-commits.use-case.js';
 export * from './lib/use-cases/list-pull-request-comments.use-case.js';
+export * from './lib/use-cases/list-pull-request-reviews.use-case.js';
 export * from './lib/use-cases/get-combined-status.use-case.js';
 export * from './lib/use-cases/list-check-runs.use-case.js';

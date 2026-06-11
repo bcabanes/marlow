@@ -23,6 +23,7 @@ import {
   listPullRequestComments,
   listPullRequestCommits,
   listPullRequestFiles,
+  listPullRequestReviews,
   listPullRequests,
   listTree,
   removeAssignees,
@@ -142,6 +143,10 @@ const invocations: ReadonlyArray<readonly [string, Invoke]> = [
   [
     'listPullRequestComments',
     () => listPullRequestComments(throwingPort)({ ...repo, pullNumber: 1 }),
+  ],
+  [
+    'listPullRequestReviews',
+    () => listPullRequestReviews(throwingPort)({ ...repo, pullNumber: 1 }),
   ],
   [
     'getCombinedStatus',

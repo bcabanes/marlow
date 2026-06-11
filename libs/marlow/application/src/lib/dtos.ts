@@ -177,6 +177,10 @@ export interface PullRequestSummary {
   readonly merged: boolean;
   readonly labels: readonly string[];
   readonly assignees: readonly string[];
+  /** Logins asked to review but who have not necessarily acted yet. */
+  readonly requestedReviewers: readonly string[];
+  /** Team slugs asked to review (GitHub keeps these separate from users). */
+  readonly requestedTeams: readonly string[];
   readonly milestone: MilestoneRef | null;
   readonly createdAt: string;
   readonly updatedAt: string;
@@ -188,6 +192,19 @@ export interface PullRequestSummary {
  */
 export interface PullRequest extends PullRequestSummary {
   readonly body: string | null;
+}
+
+/**
+ * A single review (verdict) on a pull request. Unlike other list rows, the
+ * `body` is kept: it carries the review's rationale and is typically short.
+ */
+export interface PullRequestReview {
+  readonly id: number;
+  readonly author: string | null;
+  /** APPROVED | CHANGES_REQUESTED | COMMENTED | DISMISSED | PENDING. */
+  readonly state: string;
+  readonly body: string | null;
+  readonly submittedAt: string | null;
 }
 
 export interface PullRequestFile {

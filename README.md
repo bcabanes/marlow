@@ -198,6 +198,7 @@ runtime.
 | GET    | `/repos/:owner/:repo/pulls/:pullNumber/files`      | Files changed in a PR           |
 | GET    | `/repos/:owner/:repo/pulls/:pullNumber/commits`    | Commits in a PR                 |
 | GET    | `/repos/:owner/:repo/pulls/:pullNumber/comments`   | Conversation comments on a PR   |
+| GET    | `/repos/:owner/:repo/pulls/:pullNumber/reviews`    | Reviews (verdicts) on a PR      |
 | POST   | `/repos/:owner/:repo/pulls/:pullNumber/labels`     | Add labels to a PR · **confirm** |
 | DELETE | `/repos/:owner/:repo/pulls/:pullNumber/labels/:name` | Remove a label from a PR · **confirm** |
 | POST   | `/repos/:owner/:repo/pulls/:pullNumber/assignees`  | Add assignees to a PR · **confirm** |
@@ -214,6 +215,14 @@ and pull requests omit the `body`, and commits carry only the subject line
 (`messageHeadline`). Fetch a single issue, pull request, or commit to get the
 full body or message. Paginated lists default to 30 rows per page (`perPage`,
 max 100).
+
+Pull requests carry `requestedReviewers` (logins) and `requestedTeams` (slugs)
+alongside `assignees`, mirroring GitHub's PR object. The reviews endpoint returns
+each verdict's reviewer, `state` (`APPROVED` / `CHANGES_REQUESTED` / `COMMENTED` /
+`DISMISSED` / `PENDING`), note, and timestamp. GitHub's REST API exposes no per-PR
+code-owner resolution; owners it auto-requested already appear in
+`requestedReviewers`/`requestedTeams`, and the `CODEOWNERS` file itself is readable
+via the contents endpoint.
 
 ### Discovery for agents
 

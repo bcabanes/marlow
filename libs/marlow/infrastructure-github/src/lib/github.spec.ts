@@ -302,6 +302,86 @@ describe('createGitHubRepositoryAdapter', () => {
     expect(pull.milestone).toEqual({ number: 1, title: 'v1' });
   });
 
+  it('surfaces requested reviewers and teams as separate arrays', async () => {
+    const get = vi.fn().mockResolvedValue({
+      data: {
+        number: 42,
+        title: 'A change',
+        state: 'open',
+        body: null,
+        user: { login: 'octocat' },
+        head: { ref: 'feature' },
+        base: { ref: 'main' },
+        draft: false,
+        merged_at: null,
+        labels: [],
+        assignees: [],
+        requested_reviewers: [{ login: 'reviewer-1' }, { login: 'reviewer-2' }],
+        requested_teams: [{ slug: 'platform' }],
+        milestone: null,
+        created_at: '2020-01-01T00:00:00Z',
+        updated_at: '2020-01-02T00:00:00Z',
+      },
+    });
+    const octokit = { rest: { pulls: { get } } } as unknown as Octokit;
+    const adapter = createGitHubRepositoryAdapter(octokit);
+
+    const pull = await adapter.getPullRequest({
+      repo,
+      pullNumber: 42 as PullRequestNumber,
+    });
+
+    expect(pull.requestedReviewers).toEqual(['reviewer-1', 'reviewer-2']);
+    expect(pull.requestedTeams).toEqual(['platform']);
+  });
+
+  it('maps pull request reviews to reviewer, state, note, and timestamp', async () => {
+    const listReviews = vi.fn().mockResolvedValue({
+      data: [
+        {
+          id: 901,
+          user: { login: 'octocat' },
+          state: 'CHANGES_REQUESTED',
+          body: 'Please rename this',
+          submitted_at: '2020-01-03T00:00:00Z',
+          secret_internal_field: 'should-not-appear',
+        },
+        {
+          id: 902,
+          user: null,
+          state: 'APPROVED',
+          body: '',
+          submitted_at: null,
+        },
+      ],
+    });
+    const octokit = {
+      rest: { pulls: { listReviews } },
+    } as unknown as Octokit;
+    const adapter = createGitHubRepositoryAdapter(octokit);
+
+    const reviews = await adapter.listPullRequestReviews({
+      repo,
+      pullNumber: 42 as PullRequestNumber,
+    });
+
+    expect(reviews[0]).toEqual({
+      id: 901,
+      author: 'octocat',
+      state: 'CHANGES_REQUESTED',
+      body: 'Please rename this',
+      submittedAt: '2020-01-03T00:00:00Z',
+    });
+    expect(reviews[1].author).toBeNull();
+    expect(reviews[1].submittedAt).toBeNull();
+    expect(JSON.stringify(reviews)).not.toContain('secret_internal_field');
+    expect(listReviews).toHaveBeenCalledWith({
+      owner: 'nrwl',
+      repo: 'nx',
+      pull_number: 42,
+    });
+  });
+
   it('reduces each listed commit message to its subject headline', async () => {
     const actor = {
       name: 'Octo',
