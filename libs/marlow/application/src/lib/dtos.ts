@@ -139,6 +139,48 @@ export interface IssueComment {
   readonly updatedAt: string;
 }
 
+/**
+ * A review comment on a pull request: an inline remark anchored to the diff.
+ * Unlike an {@link IssueComment} (a conversation comment on the PR thread), it
+ * carries the diff anchor — file, line, side, and hunk — plus the threading
+ * links that say which review and which prior comment it belongs to. This is
+ * what `GET /pulls/{n}/comments` returns; conversation comments come from
+ * `GET /issues/{n}/comments`.
+ */
+export interface ReviewComment {
+  readonly id: number;
+  readonly author: string | null;
+  readonly body: string;
+  /** Path of the file the comment is anchored to. */
+  readonly path: string;
+  /** Line in the diff's after-state, or null for a file-level comment. */
+  readonly line: number | null;
+  /** Line in the diff's before-state, or null. */
+  readonly originalLine: number | null;
+  /** LEFT | RIGHT — which side of the diff the line sits on, or null. */
+  readonly side: string | null;
+  /** First line of a multi-line comment range, or null when single-line. */
+  readonly startLine: number | null;
+  /** Side of the range's first line, or null. */
+  readonly startSide: string | null;
+  /** The diff hunk the comment was left against. */
+  readonly diffHunk: string;
+  /** SHA the comment is currently anchored to. */
+  readonly commitId: string;
+  /** SHA the comment was originally left against. */
+  readonly originalCommitId: string;
+  /** Id of the comment this one replies to, or null for a top-level comment. */
+  readonly inReplyToId: number | null;
+  /** Id of the review this comment belongs to, or null. */
+  readonly pullRequestReviewId: number | null;
+  /** Permalink to the comment's #discussion_r anchor. */
+  readonly htmlUrl: string;
+  /** line | file — whether the comment targets a line or the whole file. */
+  readonly subjectType: string | null;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}
+
 /** State reasons accepted when editing an issue (mirrors GitHub's set). */
 export type IssueStateReason = 'completed' | 'not_planned' | 'reopened';
 
@@ -192,6 +234,10 @@ export interface PullRequestSummary {
  */
 export interface PullRequest extends PullRequestSummary {
   readonly body: string | null;
+  /** Number of commits in the pull request. */
+  readonly commits: number;
+  /** Number of files the pull request changes. */
+  readonly changedFiles: number;
 }
 
 /**

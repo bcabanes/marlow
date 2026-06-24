@@ -382,6 +382,103 @@ describe('createGitHubRepositoryAdapter', () => {
     });
   });
 
+  it('reads pull request comments from the review-comments endpoint with their diff anchor', async () => {
+    const listReviewComments = vi.fn().mockResolvedValue({
+      data: [
+        {
+          id: 555,
+          user: { login: 'octocat' },
+          body: 'Unnecessary variable declaration',
+          path: 'apps/web/task-details.tsx',
+          line: 166,
+          original_line: 160,
+          side: 'RIGHT',
+          start_line: null,
+          start_side: null,
+          diff_hunk: '@@ -163,6 +163,7 @@',
+          commit_id: 'deadbeef',
+          original_commit_id: 'cafef00d',
+          in_reply_to_id: null,
+          pull_request_review_id: 901,
+          html_url: 'https://github.com/nrwl/nx/pull/42#discussion_r555',
+          subject_type: 'line',
+          created_at: '2020-01-03T00:00:00Z',
+          updated_at: '2020-01-03T00:00:00Z',
+          secret_internal_field: 'should-not-appear',
+        },
+      ],
+    });
+    const octokit = {
+      rest: { pulls: { listReviewComments } },
+    } as unknown as Octokit;
+    const adapter = createGitHubRepositoryAdapter(octokit);
+
+    const comments = await adapter.listPullRequestComments({
+      repo,
+      pullNumber: 42 as PullRequestNumber,
+    });
+
+    expect(comments[0]).toEqual({
+      id: 555,
+      author: 'octocat',
+      body: 'Unnecessary variable declaration',
+      path: 'apps/web/task-details.tsx',
+      line: 166,
+      originalLine: 160,
+      side: 'RIGHT',
+      startLine: null,
+      startSide: null,
+      diffHunk: '@@ -163,6 +163,7 @@',
+      commitId: 'deadbeef',
+      originalCommitId: 'cafef00d',
+      inReplyToId: null,
+      pullRequestReviewId: 901,
+      htmlUrl: 'https://github.com/nrwl/nx/pull/42#discussion_r555',
+      subjectType: 'line',
+      createdAt: '2020-01-03T00:00:00Z',
+      updatedAt: '2020-01-03T00:00:00Z',
+    });
+    expect(JSON.stringify(comments)).not.toContain('secret_internal_field');
+    expect(listReviewComments).toHaveBeenCalledWith({
+      owner: 'nrwl',
+      repo: 'nx',
+      pull_number: 42,
+    });
+  });
+
+  it('surfaces the commit and changed-file counts on a pull request', async () => {
+    const get = vi.fn().mockResolvedValue({
+      data: {
+        number: 42,
+        title: 'A change',
+        state: 'open',
+        body: null,
+        user: { login: 'octocat' },
+        head: { ref: 'feature' },
+        base: { ref: 'main' },
+        draft: false,
+        merged_at: null,
+        labels: [],
+        assignees: [],
+        milestone: null,
+        commits: 3,
+        changed_files: 7,
+        created_at: '2020-01-01T00:00:00Z',
+        updated_at: '2020-01-02T00:00:00Z',
+      },
+    });
+    const octokit = { rest: { pulls: { get } } } as unknown as Octokit;
+    const adapter = createGitHubRepositoryAdapter(octokit);
+
+    const pull = await adapter.getPullRequest({
+      repo,
+      pullNumber: 42 as PullRequestNumber,
+    });
+
+    expect(pull.commits).toBe(3);
+    expect(pull.changedFiles).toBe(7);
+  });
+
   it('reduces each listed commit message to its subject headline', async () => {
     const actor = {
       name: 'Octo',

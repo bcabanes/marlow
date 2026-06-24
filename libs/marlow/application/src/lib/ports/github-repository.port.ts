@@ -28,6 +28,7 @@ import {
   PullRequestReview,
   PullRequestState,
   PullRequestSummary,
+  ReviewComment,
   TreeResult,
 } from '../dtos.js';
 
@@ -172,7 +173,7 @@ export interface GitHubRepositoryPort {
       readonly repo: RepoRef;
       readonly pullNumber: PullRequestNumber;
     } & Pagination,
-  ): Promise<readonly IssueComment[]>;
+  ): Promise<readonly ReviewComment[]>;
 
   listPullRequestReviews(
     input: {

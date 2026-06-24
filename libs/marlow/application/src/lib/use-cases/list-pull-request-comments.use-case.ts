@@ -4,7 +4,7 @@ import {
   createPullRequestNumber,
   ok,
 } from '@org/marlow-domain';
-import { IssueComment } from '../dtos.js';
+import { ReviewComment } from '../dtos.js';
 import { GitHubRepositoryPort } from '../ports/github-repository.port.js';
 import { resolveAllowedRepo } from '../resolve-allowed-repo.js';
 
@@ -20,7 +20,7 @@ export const listPullRequestComments =
   (github: GitHubRepositoryPort) =>
   async (
     input: ListPullRequestCommentsInput,
-  ): Promise<Result<readonly IssueComment[], DomainError>> => {
+  ): Promise<Result<readonly ReviewComment[], DomainError>> => {
     const repo = resolveAllowedRepo(input.owner, input.repo);
     if (!repo.ok) return repo;
     const pullNumber = createPullRequestNumber(input.pullNumber);

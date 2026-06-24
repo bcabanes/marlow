@@ -19,6 +19,7 @@ import {
   mapPullRequestFile,
   mapPullRequestReview,
   mapPullRequestSummary,
+  mapReviewComment,
   mapTree,
 } from './github-dto-mapper.js';
 
@@ -295,15 +296,17 @@ export const createGitHubRepositoryAdapter = (
 
     listPullRequestComments: ({ repo, pullNumber, page, perPage }) =>
       call(async () => {
-        // The conversational comments on a PR are issue comments on its number.
-        const { data } = await octokit.rest.issues.listComments({
+        // GitHub's pulls/{n}/comments endpoint returns review comments — the
+        // inline remarks anchored to the diff — which are distinct from the
+        // conversation comments served by issues/{n}/comments.
+        const { data } = await octokit.rest.pulls.listReviewComments({
           owner: repo.owner,
           repo: repo.repo,
-          issue_number: pullNumber,
+          pull_number: pullNumber,
           ...(page === undefined ? {} : { page }),
           ...(perPage === undefined ? {} : { per_page: perPage }),
         });
-        return data.map(mapIssueComment);
+        return data.map(mapReviewComment);
       }),
 
     listPullRequestReviews: ({ repo, pullNumber, page, perPage }) =>

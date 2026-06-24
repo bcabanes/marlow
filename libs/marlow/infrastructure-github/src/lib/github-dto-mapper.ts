@@ -20,6 +20,7 @@ import {
   PullRequestFile,
   PullRequestReview,
   PullRequestSummary,
+  ReviewComment,
   TreeEntryType,
   TreeResult,
 } from '@org/marlow-application';
@@ -107,6 +108,8 @@ interface GhPullLike {
   readonly requested_reviewers?: ReadonlyArray<GhAssignee> | null;
   readonly requested_teams?: ReadonlyArray<GhTeam> | null;
   readonly milestone?: GhMilestone;
+  readonly commits?: number;
+  readonly changed_files?: number;
   readonly created_at: string;
   readonly updated_at: string;
 }
@@ -117,6 +120,27 @@ interface GhReviewLike {
   readonly state: string;
   readonly body?: string | null;
   readonly submitted_at?: string | null;
+}
+
+interface GhReviewCommentLike {
+  readonly id: number;
+  readonly user: { readonly login: string } | null;
+  readonly body?: string | null;
+  readonly path: string;
+  readonly line?: number | null;
+  readonly original_line?: number | null;
+  readonly side?: string | null;
+  readonly start_line?: number | null;
+  readonly start_side?: string | null;
+  readonly diff_hunk: string;
+  readonly commit_id: string;
+  readonly original_commit_id: string;
+  readonly in_reply_to_id?: number | null;
+  readonly pull_request_review_id: number | null;
+  readonly html_url: string;
+  readonly subject_type?: string | null;
+  readonly created_at: string;
+  readonly updated_at: string;
 }
 
 export interface GhFileContent {
@@ -268,6 +292,27 @@ export const mapIssueComment = (data: GhCommentLike): IssueComment => ({
   updatedAt: data.updated_at,
 });
 
+export const mapReviewComment = (data: GhReviewCommentLike): ReviewComment => ({
+  id: data.id,
+  author: data.user?.login ?? null,
+  body: data.body ?? '',
+  path: data.path,
+  line: data.line ?? null,
+  originalLine: data.original_line ?? null,
+  side: data.side ?? null,
+  startLine: data.start_line ?? null,
+  startSide: data.start_side ?? null,
+  diffHunk: data.diff_hunk,
+  commitId: data.commit_id,
+  originalCommitId: data.original_commit_id,
+  inReplyToId: data.in_reply_to_id ?? null,
+  pullRequestReviewId: data.pull_request_review_id ?? null,
+  htmlUrl: data.html_url,
+  subjectType: data.subject_type ?? null,
+  createdAt: data.created_at,
+  updatedAt: data.updated_at,
+});
+
 export const mapPullRequestSummary = (
   data: GhPullLike,
 ): PullRequestSummary => ({
@@ -291,6 +336,8 @@ export const mapPullRequestSummary = (
 export const mapPullRequest = (data: GhPullLike): PullRequest => ({
   ...mapPullRequestSummary(data),
   body: data.body ?? null,
+  commits: data.commits ?? 0,
+  changedFiles: data.changed_files ?? 0,
 });
 
 export const mapPullRequestReview = (
