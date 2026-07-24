@@ -24,5 +24,8 @@
     {
       "path": "./apps/marlow-api"
     }
-  ]
+  ],
+  "compilerOptions": {
+    "ignoreDeprecations": "6.0"
+  }
 }

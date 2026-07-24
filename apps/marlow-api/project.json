@@ -87,6 +87,14 @@
           "buildTarget": "marlow-api:build:production"
         }
       }
+    },
+    "start": {
+      "continuous": true,
+      "dependsOn": ["build"],
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "MARLOW_GITHUB_TOKEN=\"$(pass-cli item view --vault-name=Development --item-title=\"Marlow - GitHub Access Token\" --field Token)\" node apps/marlow-api/dist/main.js"
+      }
     }
   }
 }
