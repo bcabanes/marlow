@@ -1,4 +1,4 @@
-import { GitHubRepositoryPort } from '@org/marlow-application';
+import { GitHubPortError, GitHubRepositoryPort } from '@org/marlow-application';
 import Fastify, { FastifyInstance } from 'fastify';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { app } from './app';
@@ -217,4 +217,193 @@ describe('marlow-api', () => {
       label: 'wip',
     });
   });
+
+  it('creates an immediate pull-request review comment (201)', async () => {
+    const comment = reviewComment(555);
+    const createPullRequestReviewComment = vi.fn().mockResolvedValue(comment);
+    await start(buildDeps({ createPullRequestReviewComment }));
+
+    const response = await server.inject({
+      method: 'POST',
+      url: '/repos/nrwl/nx/pulls/42/comments',
+      payload: {
+        confirm: true,
+        body: 'Please rename this',
+        commitId: 'a'.repeat(40),
+        path: 'src/index.ts',
+        line: 12,
+        side: 'RIGHT',
+        startLine: 10,
+        startSide: 'RIGHT',
+      },
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(response.json()).toEqual(comment);
+    expect(createPullRequestReviewComment).toHaveBeenCalledWith({
+      repo: { owner: 'nrwl', repo: 'nx' },
+      pullNumber: 42,
+      body: 'Please rename this',
+      commitId: 'a'.repeat(40),
+      target: {
+        subjectType: 'line',
+        path: 'src/index.ts',
+        line: 12,
+        side: 'RIGHT',
+        startLine: 10,
+        startSide: 'RIGHT',
+      },
+    });
+  });
+
+  it('creates a review-comment reply (201)', async () => {
+    const comment = reviewComment(556);
+    const createPullRequestReviewCommentReply = vi
+      .fn()
+      .mockResolvedValue(comment);
+    await start(buildDeps({ createPullRequestReviewCommentReply }));
+
+    const response = await server.inject({
+      method: 'POST',
+      url: '/repos/nrwl/nx/pulls/42/comments/555/replies',
+      payload: { confirm: true, body: 'Agreed' },
+    });
+
+    expect(response.statusCode).toBe(201);
+    expect(response.json()).toEqual(comment);
+    expect(createPullRequestReviewCommentReply).toHaveBeenCalledWith({
+      repo: { owner: 'nrwl', repo: 'nx' },
+      pullNumber: 42,
+      commentId: 555,
+      body: 'Agreed',
+    });
+  });
+
+  it('submits a grouped pull-request review (200)', async () => {
+    const review = {
+      id: 901,
+      author: 'octocat',
+      state: 'COMMENTED',
+      body: 'Summary',
+      submittedAt: '2020-01-01T00:00:00Z',
+    };
+    const createPullRequestReview = vi.fn().mockResolvedValue(review);
+    await start(buildDeps({ createPullRequestReview }));
+
+    const response = await server.inject({
+      method: 'POST',
+      url: '/repos/nrwl/nx/pulls/42/reviews',
+      payload: {
+        confirm: true,
+        event: 'COMMENT',
+        body: 'Summary',
+        comments: [
+          {
+            body: 'Inline',
+            path: 'src/index.ts',
+            line: 12,
+            side: 'RIGHT',
+          },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual(review);
+    expect(createPullRequestReview).toHaveBeenCalledWith({
+      repo: { owner: 'nrwl', repo: 'nx' },
+      pullNumber: 42,
+      event: 'COMMENT',
+      body: 'Summary',
+      comments: [
+        {
+          body: 'Inline',
+          path: 'src/index.ts',
+          line: 12,
+          side: 'RIGHT',
+          startLine: undefined,
+          startSide: undefined,
+        },
+      ],
+    });
+  });
+
+  it('strictly rejects unsupported review-comment fields before GitHub', async () => {
+    const createPullRequestReviewComment = vi.fn();
+    await start(buildDeps({ createPullRequestReviewComment }));
+
+    const response = await server.inject({
+      method: 'POST',
+      url: '/repos/nrwl/nx/pulls/42/comments',
+      payload: {
+        confirm: true,
+        body: 'Please rename this',
+        commitId: 'a'.repeat(40),
+        path: 'src/index.ts',
+        position: 4,
+        line: 12,
+        side: 'RIGHT',
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.code).toBe('validation_failed');
+    expect(createPullRequestReviewComment).not.toHaveBeenCalled();
+  });
+
+  it('sanitizes GitHub validation failures from review-comment writes', async () => {
+    const createPullRequestReviewComment = vi
+      .fn()
+      .mockRejectedValue(
+        new GitHubPortError(
+          'validation_failed',
+          'raw provider validation mentions ghp_secret',
+          { status: 422 },
+        ),
+      );
+    await start(buildDeps({ createPullRequestReviewComment }));
+
+    const response = await server.inject({
+      method: 'POST',
+      url: '/repos/nrwl/nx/pulls/42/comments',
+      payload: {
+        confirm: true,
+        body: 'Please rename this',
+        commitId: 'a'.repeat(40),
+        path: 'src/index.ts',
+        line: 12,
+        side: 'RIGHT',
+      },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toEqual({
+      error: {
+        code: 'validation_failed',
+        message: 'GitHub rejected the request',
+      },
+    });
+    expect(response.body).not.toContain('ghp_secret');
+  });
+});
+
+const reviewComment = (id: number) => ({
+  id,
+  author: 'octocat',
+  body: 'Review comment',
+  path: 'src/index.ts',
+  line: 12,
+  originalLine: 12,
+  side: 'RIGHT',
+  startLine: null,
+  startSide: null,
+  diffHunk: '@@ -10,3 +10,3 @@',
+  commitId: 'a'.repeat(40),
+  originalCommitId: 'a'.repeat(40),
+  inReplyToId: null,
+  pullRequestReviewId: 901,
+  htmlUrl: `https://github.com/nrwl/nx/pull/42#discussion_r${id}`,
+  subjectType: 'line',
+  createdAt: '2020-01-01T00:00:00Z',
+  updatedAt: '2020-01-01T00:00:00Z',
 });

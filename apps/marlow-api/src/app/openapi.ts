@@ -40,6 +40,8 @@ export interface BodySchema {
   readonly required: readonly string[];
   readonly description?: string;
   readonly properties: Record<string, unknown>;
+  readonly oneOf?: readonly unknown[];
+  readonly allOf?: readonly unknown[];
 }
 
 const param = (
@@ -61,6 +63,18 @@ const nonEmptyString = { type: 'string', minLength: 1 };
 const positiveInt = { type: 'integer', minimum: 1 };
 const perPageInt = { type: 'integer', minimum: 1, maximum: 100, default: 30 };
 const stateSchema = { type: 'string', enum: ['open', 'closed', 'all'] };
+const reviewSideSchema = { type: 'string', enum: ['LEFT', 'RIGHT'] };
+const reviewBodySchema = { type: 'string', minLength: 1, maxLength: 65536 };
+const rangeStartPairing = [
+  {
+    if: { required: ['startLine'] },
+    then: { required: ['startSide'] },
+  },
+  {
+    if: { required: ['startSide'] },
+    then: { required: ['startLine'] },
+  },
+] as const;
 
 // --- reusable parameters (referenced by $ref from each operation) ---
 export const parameters = {
@@ -68,6 +82,9 @@ export const parameters = {
   repo: param('repo', 'path', true, nonEmptyString),
   issueNumber: param('issueNumber', 'path', true, positiveInt),
   pullNumber: param('pullNumber', 'path', true, positiveInt),
+  stackNumber: param('stackNumber', 'path', true, positiveInt),
+  mergeId: param('mergeId', 'path', true, { type: 'string', format: 'uuid' }),
+  commentId: param('commentId', 'path', true, positiveInt),
   sha: param('sha', 'path', true, nonEmptyString),
   filePath: param(
     'path',
@@ -86,6 +103,13 @@ export const parameters = {
   page: param('page', 'query', false, positiveInt),
   perPage: param('perPage', 'query', false, perPageInt),
   state: param('state', 'query', false, stateSchema),
+  pullNumberFilter: param(
+    'pullNumber',
+    'query',
+    false,
+    positiveInt,
+    'Only return the stack containing this pull request.',
+  ),
   refRequired: param(
     'ref',
     'query',
@@ -170,6 +194,153 @@ export const bodySchemas = {
       base: nonEmptyString,
     },
   },
+  CreatePullRequestStack: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['confirm', 'pullNumbers'],
+    description:
+      'Pull request numbers must be unique and ordered from the bottom of the stack to the top.',
+    properties: {
+      confirm: { const: true },
+      pullNumbers: {
+        type: 'array',
+        items: positiveInt,
+        minItems: 2,
+        maxItems: 100,
+        uniqueItems: true,
+      },
+    },
+  },
+  AddPullRequestsToStack: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['confirm', 'pullNumbers'],
+    description:
+      'Pull request numbers to append, ordered from the current stack top upward.',
+    properties: {
+      confirm: { const: true },
+      pullNumbers: {
+        type: 'array',
+        items: positiveInt,
+        minItems: 1,
+        maxItems: 100,
+        uniqueItems: true,
+      },
+    },
+  },
+  MergePullRequestAsync: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['confirm'],
+    description:
+      'Starts an atomic asynchronous merge. For a stacked PR, this merges every PR through the requested position. Poll the returned id while status=pending.',
+    properties: {
+      confirm: { const: true },
+      mergeMethod: { type: 'string', enum: ['merge', 'squash', 'rebase'] },
+      mergeAction: {
+        type: 'string',
+        enum: ['default', 'direct_merge', 'merge_queue'],
+      },
+      commitTitle: { type: 'string', minLength: 1, maxLength: 256 },
+      commitMessage: { type: 'string', maxLength: 65536 },
+      expectedHeadSha: nonEmptyString,
+    },
+  },
+  CreatePullRequestReviewComment: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['confirm', 'body', 'commitId', 'path'],
+    description:
+      'Use line+side for a line target, optional paired startLine+startSide for a range, or subjectType=file without line fields.',
+    properties: {
+      confirm: { const: true },
+      body: reviewBodySchema,
+      commitId: nonEmptyString,
+      path: { type: 'string', minLength: 1, maxLength: 4096 },
+      subjectType: { type: 'string', enum: ['line', 'file'] },
+      line: positiveInt,
+      side: reviewSideSchema,
+      startLine: positiveInt,
+      startSide: reviewSideSchema,
+    },
+    oneOf: [
+      {
+        title: 'Line or range comment',
+        required: ['line', 'side'],
+        properties: { subjectType: { const: 'line' } },
+        allOf: rangeStartPairing,
+      },
+      {
+        title: 'File comment',
+        required: ['subjectType'],
+        properties: { subjectType: { const: 'file' } },
+        not: {
+          anyOf: [
+            { required: ['line'] },
+            { required: ['side'] },
+            { required: ['startLine'] },
+            { required: ['startSide'] },
+          ],
+        },
+      },
+    ],
+  },
+  CreatePullRequestReviewCommentReply: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['confirm', 'body'],
+    properties: {
+      confirm: { const: true },
+      body: reviewBodySchema,
+    },
+  },
+  CreatePullRequestReview: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['confirm', 'event'],
+    description:
+      'body is required and non-empty for COMMENT and REQUEST_CHANGES. commitId is recommended when comments are present.',
+    properties: {
+      confirm: { const: true },
+      event: {
+        type: 'string',
+        enum: ['COMMENT', 'APPROVE', 'REQUEST_CHANGES'],
+      },
+      commitId: nonEmptyString,
+      body: { type: 'string', maxLength: 65536 },
+      comments: {
+        type: 'array',
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['body', 'path', 'line', 'side'],
+          properties: {
+            body: reviewBodySchema,
+            path: { type: 'string', minLength: 1, maxLength: 4096 },
+            line: positiveInt,
+            side: reviewSideSchema,
+            startLine: positiveInt,
+            startSide: reviewSideSchema,
+          },
+          allOf: rangeStartPairing,
+        },
+      },
+    },
+    allOf: [
+      {
+        if: {
+          properties: {
+            event: { enum: ['COMMENT', 'REQUEST_CHANGES'] },
+          },
+          required: ['event'],
+        },
+        then: {
+          required: ['body'],
+          properties: { body: reviewBodySchema },
+        },
+      },
+    ],
+  },
   UpdateIssue: {
     type: 'object',
     additionalProperties: false,
@@ -242,6 +413,7 @@ export interface Endpoint {
 const repoParams = ['owner', 'repo'] as const;
 const issueParams = [...repoParams, 'issueNumber'] as const;
 const pullParams = [...repoParams, 'pullNumber'] as const;
+const stackParams = [...repoParams, 'stackNumber'] as const;
 const pagination = ['page', 'perPage'] as const;
 
 export const endpoints: readonly Endpoint[] = [
@@ -493,6 +665,27 @@ export const endpoints: readonly Endpoint[] = [
     write: true,
   },
   {
+    method: 'put',
+    path: '/repos/{owner}/{repo}/pulls/{pullNumber}/merge-async',
+    tag: 'pulls',
+    operationId: 'mergePullRequestAsync',
+    summary:
+      'Atomically merge this pull request and any stacked pull requests below it',
+    returns: 'AsyncMergeResult',
+    params: pullParams,
+    body: 'MergePullRequestAsync',
+    write: true,
+  },
+  {
+    method: 'get',
+    path: '/repos/{owner}/{repo}/pulls/{pullNumber}/merge-async/{mergeId}',
+    tag: 'pulls',
+    operationId: 'getPullRequestMergeResult',
+    summary: 'Poll an asynchronous pull-request merge',
+    returns: 'AsyncMergeResult',
+    params: [...pullParams, 'mergeId'],
+  },
+  {
     method: 'post',
     path: '/repos/{owner}/{repo}/pulls/{pullNumber}/close',
     tag: 'pulls',
@@ -543,6 +736,30 @@ export const endpoints: readonly Endpoint[] = [
     params: [...pullParams, ...pagination],
   },
   {
+    method: 'post',
+    path: '/repos/{owner}/{repo}/pulls/{pullNumber}/comments',
+    tag: 'pulls',
+    operationId: 'createPullRequestReviewComment',
+    summary: 'Create an immediate line, range, or file review comment',
+    returns: 'ReviewComment',
+    params: pullParams,
+    body: 'CreatePullRequestReviewComment',
+    status: 201,
+    write: true,
+  },
+  {
+    method: 'post',
+    path: '/repos/{owner}/{repo}/pulls/{pullNumber}/comments/{commentId}/replies',
+    tag: 'pulls',
+    operationId: 'createPullRequestReviewCommentReply',
+    summary: 'Reply to a top-level pull-request review comment',
+    returns: 'ReviewComment',
+    params: [...pullParams, 'commentId'],
+    body: 'CreatePullRequestReviewCommentReply',
+    status: 201,
+    write: true,
+  },
+  {
     method: 'get',
     path: '/repos/{owner}/{repo}/pulls/{pullNumber}/reviews',
     tag: 'pulls',
@@ -550,6 +767,17 @@ export const endpoints: readonly Endpoint[] = [
     summary: 'List the reviews (verdicts) on a pull request',
     returns: 'PullRequestReview[]',
     params: [...pullParams, ...pagination],
+  },
+  {
+    method: 'post',
+    path: '/repos/{owner}/{repo}/pulls/{pullNumber}/reviews',
+    tag: 'pulls',
+    operationId: 'createPullRequestReview',
+    summary: 'Submit a pull-request review, optionally with inline comments',
+    returns: 'PullRequestReview',
+    params: pullParams,
+    body: 'CreatePullRequestReview',
+    write: true,
   },
   {
     method: 'post',
@@ -614,6 +842,58 @@ export const endpoints: readonly Endpoint[] = [
     summary: 'Clear a pull request milestone',
     returns: 'MilestoneResult',
     params: pullParams,
+    body: 'Confirm',
+    write: true,
+  },
+  {
+    method: 'get',
+    path: '/repos/{owner}/{repo}/stacks',
+    tag: 'stacks',
+    operationId: 'listPullRequestStacks',
+    summary: 'List pull-request stacks',
+    returns: 'PullRequestStack[]',
+    params: [...repoParams, 'pullNumberFilter', ...pagination],
+  },
+  {
+    method: 'get',
+    path: '/repos/{owner}/{repo}/stacks/{stackNumber}',
+    tag: 'stacks',
+    operationId: 'getPullRequestStack',
+    summary: 'Get a pull-request stack',
+    returns: 'PullRequestStack',
+    params: stackParams,
+  },
+  {
+    method: 'post',
+    path: '/repos/{owner}/{repo}/stacks',
+    tag: 'stacks',
+    operationId: 'createPullRequestStack',
+    summary: 'Link an ordered pull-request chain as a stack',
+    returns: 'PullRequestStack',
+    params: repoParams,
+    body: 'CreatePullRequestStack',
+    status: 201,
+    write: true,
+  },
+  {
+    method: 'post',
+    path: '/repos/{owner}/{repo}/stacks/{stackNumber}/add',
+    tag: 'stacks',
+    operationId: 'addPullRequestsToStack',
+    summary: 'Append pull requests to the top of a stack',
+    returns: 'PullRequestStack',
+    params: stackParams,
+    body: 'AddPullRequestsToStack',
+    write: true,
+  },
+  {
+    method: 'post',
+    path: '/repos/{owner}/{repo}/stacks/{stackNumber}/unstack',
+    tag: 'stacks',
+    operationId: 'unstackPullRequests',
+    summary: 'Remove eligible pull requests from a stack',
+    returns: 'PullRequestStack | null',
+    params: stackParams,
     body: 'Confirm',
     write: true,
   },
@@ -698,6 +978,7 @@ export const buildOpenApiDocument = () => {
       { name: 'commits' },
       { name: 'issues' },
       { name: 'pulls' },
+      { name: 'stacks' },
       { name: 'statuses' },
       { name: 'checks' },
     ],

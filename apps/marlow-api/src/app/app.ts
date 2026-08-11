@@ -10,6 +10,7 @@ import { registerOpenApiRoutes } from './routes/openapi.routes';
 import { registerPullsRoutes } from './routes/pulls.routes';
 import { registerReposRoutes } from './routes/repos.routes';
 import { registerStatusesRoutes } from './routes/statuses.routes';
+import { registerStackedPullsRoutes } from './routes/stacked-pulls.routes';
 
 export interface AppOptions {
   readonly deps: AppDependencies;
@@ -30,5 +31,6 @@ export async function app(
   registerCommitsRoutes(fastify, opts.deps);
   registerIssuesRoutes(fastify, opts.deps);
   registerPullsRoutes(fastify, opts.deps);
+  registerStackedPullsRoutes(fastify, opts.deps);
   registerStatusesRoutes(fastify, opts.deps);
 }

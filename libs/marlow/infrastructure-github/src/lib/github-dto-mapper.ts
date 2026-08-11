@@ -1,5 +1,6 @@
 import type { Octokit } from 'octokit';
 import {
+  AsyncMergeResult,
   AssigneeSet,
   CheckRun,
   CodeSearchResult,
@@ -19,6 +20,8 @@ import {
   PullRequest,
   PullRequestFile,
   PullRequestReview,
+  PullRequestStack,
+  PullRequestStackMembership,
   PullRequestSummary,
   ReviewComment,
   TreeEntryType,
@@ -98,11 +101,12 @@ interface GhPullLike {
   readonly state: string;
   readonly body: string | null;
   readonly user: { readonly login: string } | null;
-  readonly head: { readonly ref: string };
+  readonly head: { readonly ref: string; readonly sha: string };
   readonly base: { readonly ref: string };
   readonly draft?: boolean;
   readonly merged?: boolean;
   readonly merged_at: string | null;
+  readonly stack?: GhPullStackMembershipLike | null;
   readonly labels?: ReadonlyArray<GhLabel>;
   readonly assignees?: ReadonlyArray<GhAssignee> | null;
   readonly requested_reviewers?: ReadonlyArray<GhAssignee> | null;
@@ -112,6 +116,43 @@ interface GhPullLike {
   readonly changed_files?: number;
   readonly created_at: string;
   readonly updated_at: string;
+}
+
+interface GhPullStackMembershipLike {
+  readonly id: number;
+  readonly number: number;
+  readonly size: number;
+  readonly position: number;
+  readonly base: { readonly ref: string; readonly sha: string };
+}
+
+interface GhPullRequestStackLike {
+  readonly id: number;
+  readonly number: number;
+  readonly node_id: string;
+  readonly url: string;
+  readonly base: { readonly ref: string };
+  readonly open: boolean;
+  readonly created_at: string;
+  readonly pull_requests: ReadonlyArray<{
+    readonly number: number;
+    readonly state: string;
+    readonly draft: boolean;
+    readonly merged_at: string | null;
+    readonly head: { readonly ref: string; readonly sha: string };
+  }>;
+}
+
+interface GhAsyncMergeResultLike {
+  readonly status: 'pending' | 'merged' | 'enqueued' | 'failed';
+  readonly details: {
+    readonly message: string;
+    readonly uuid?: string;
+    readonly merge_method?: 'merge' | 'squash' | 'rebase';
+    readonly merge_action?: 'default' | 'direct_merge' | 'merge_queue';
+    readonly expected_head_sha?: string;
+    readonly sha?: string;
+  };
 }
 
 interface GhReviewLike {
@@ -321,9 +362,11 @@ export const mapPullRequestSummary = (
   state: data.state,
   author: data.user?.login ?? null,
   headRef: data.head.ref,
+  headSha: data.head.sha,
   baseRef: data.base.ref,
   draft: data.draft ?? false,
   merged: data.merged ?? data.merged_at != null,
+  stack: mapPullRequestStackMembership(data.stack),
   labels: extractLabelNames(data.labels ?? []),
   assignees: extractAssigneeLogins(data.assignees),
   requestedReviewers: extractAssigneeLogins(data.requested_reviewers),
@@ -332,6 +375,20 @@ export const mapPullRequestSummary = (
   createdAt: data.created_at,
   updatedAt: data.updated_at,
 });
+
+const mapPullRequestStackMembership = (
+  data: GhPullStackMembershipLike | null | undefined,
+): PullRequestStackMembership | null =>
+  data == null
+    ? null
+    : {
+        id: data.id,
+        number: data.number,
+        size: data.size,
+        position: data.position,
+        baseRef: data.base.ref,
+        baseSha: data.base.sha,
+      };
 
 export const mapPullRequest = (data: GhPullLike): PullRequest => ({
   ...mapPullRequestSummary(data),
@@ -356,6 +413,46 @@ export const mapPullRequestFile = (data: PullFileItem): PullRequestFile => ({
   additions: data.additions,
   deletions: data.deletions,
   changes: data.changes,
+});
+
+export const mapPullRequestStack = (
+  data: GhPullRequestStackLike,
+): PullRequestStack => ({
+  id: data.id,
+  number: data.number,
+  nodeId: data.node_id,
+  url: data.url,
+  baseRef: data.base.ref,
+  open: data.open,
+  createdAt: data.created_at,
+  pullRequests: data.pull_requests.map((pull) => ({
+    number: pull.number,
+    state: pull.state,
+    draft: pull.draft,
+    mergedAt: pull.merged_at,
+    headRef: pull.head.ref,
+    headSha: pull.head.sha,
+  })),
+});
+
+export const mapAsyncMergeResult = (
+  data: GhAsyncMergeResultLike,
+): AsyncMergeResult => ({
+  status: data.status,
+  message: data.details.message,
+  ...(data.details.uuid === undefined ? {} : { id: data.details.uuid }),
+  ...(data.details.merge_method === undefined
+    ? {}
+    : { mergeMethod: data.details.merge_method }),
+  ...(data.details.merge_action === undefined
+    ? {}
+    : { mergeAction: data.details.merge_action }),
+  ...(data.details.expected_head_sha === undefined
+    ? {}
+    : { expectedHeadSha: data.details.expected_head_sha }),
+  ...(data.details.sha === undefined
+    ? {}
+    : { mergeCommitSha: data.details.sha }),
 });
 
 export const mapCombinedStatus = (

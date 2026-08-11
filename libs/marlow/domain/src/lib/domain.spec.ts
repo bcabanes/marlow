@@ -3,10 +3,13 @@ import {
   ALLOWED_REPOS,
   assertRepoAllowed,
   createFilePath,
+  createAsyncMergeId,
   createGitRef,
   createGitSha,
   createIssueNumber,
   createPullRequestNumber,
+  createPullRequestStackNumber,
+  createReviewCommentId,
   createRepoRef,
   isRepoAllowed,
   repoRefToString,
@@ -98,10 +101,23 @@ describe('issue and pull request numbers', () => {
   it('accepts positive integers', () => {
     expect(createIssueNumber(1).ok).toBe(true);
     expect(createPullRequestNumber(42).ok).toBe(true);
+    expect(createPullRequestStackNumber(7).ok).toBe(true);
+    expect(createReviewCommentId(555).ok).toBe(true);
   });
 
   it.each([0, -1, 1.5, Number.NaN])('rejects %j', (value) => {
     expect(createIssueNumber(value).ok).toBe(false);
     expect(createPullRequestNumber(value).ok).toBe(false);
+    expect(createPullRequestStackNumber(value).ok).toBe(false);
+    expect(createReviewCommentId(value).ok).toBe(false);
+  });
+});
+
+describe('asynchronous merge IDs', () => {
+  it('accepts UUIDs and rejects arbitrary strings', () => {
+    expect(createAsyncMergeId('630b9d5e-3f2a-4f7e-8b0c-2d5f9a8c1e42').ok).toBe(
+      true,
+    );
+    expect(createAsyncMergeId('not-a-uuid').ok).toBe(false);
   });
 });

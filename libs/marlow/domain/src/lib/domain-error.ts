@@ -12,6 +12,9 @@ export const DOMAIN_ERROR_CODES = {
   InvalidFilePath: 'invalid_file_path',
   InvalidIssueNumber: 'invalid_issue_number',
   InvalidPullRequestNumber: 'invalid_pull_request_number',
+  InvalidPullRequestStackNumber: 'invalid_pull_request_stack_number',
+  InvalidAsyncMergeId: 'invalid_async_merge_id',
+  InvalidReviewCommentId: 'invalid_review_comment_id',
   InvalidSearchQuery: 'invalid_search_query',
 } as const;
 

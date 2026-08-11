@@ -1,12 +1,16 @@
 import {
+  AsyncMergeId,
   FilePath,
   GitRef,
   GitSha,
   IssueNumber,
   PullRequestNumber,
+  PullRequestStackNumber,
   RepoRef,
+  ReviewCommentId,
 } from '@org/marlow-domain';
 import {
+  AsyncMergeResult,
   AssigneeSet,
   CheckRun,
   CodeSearchResult,
@@ -27,10 +31,39 @@ import {
   PullRequestFile,
   PullRequestReview,
   PullRequestState,
+  PullRequestMergeAction,
+  PullRequestMergeMethod,
+  PullRequestStack,
   PullRequestSummary,
   ReviewComment,
   TreeResult,
 } from '../dtos.js';
+
+export type PullRequestReviewSide = 'LEFT' | 'RIGHT';
+export type PullRequestReviewEvent = 'COMMENT' | 'APPROVE' | 'REQUEST_CHANGES';
+
+export type PullRequestReviewCommentTarget =
+  | {
+      readonly subjectType: 'line';
+      readonly path: FilePath;
+      readonly line: number;
+      readonly side: PullRequestReviewSide;
+      readonly startLine?: number;
+      readonly startSide?: PullRequestReviewSide;
+    }
+  | {
+      readonly subjectType: 'file';
+      readonly path: FilePath;
+    };
+
+export interface PullRequestReviewDraftComment {
+  readonly body: string;
+  readonly path: FilePath;
+  readonly line: number;
+  readonly side: PullRequestReviewSide;
+  readonly startLine?: number;
+  readonly startSide?: PullRequestReviewSide;
+}
 
 /**
  * The outbound port for reading from and writing to GitHub.
@@ -175,12 +208,82 @@ export interface GitHubRepositoryPort {
     } & Pagination,
   ): Promise<readonly ReviewComment[]>;
 
+  createPullRequestReviewComment(input: {
+    readonly repo: RepoRef;
+    readonly pullNumber: PullRequestNumber;
+    readonly body: string;
+    readonly commitId: GitSha;
+    readonly target: PullRequestReviewCommentTarget;
+  }): Promise<ReviewComment>;
+
+  createPullRequestReviewCommentReply(input: {
+    readonly repo: RepoRef;
+    readonly pullNumber: PullRequestNumber;
+    readonly commentId: ReviewCommentId;
+    readonly body: string;
+  }): Promise<ReviewComment>;
+
   listPullRequestReviews(
     input: {
       readonly repo: RepoRef;
       readonly pullNumber: PullRequestNumber;
     } & Pagination,
   ): Promise<readonly PullRequestReview[]>;
+
+  createPullRequestReview(input: {
+    readonly repo: RepoRef;
+    readonly pullNumber: PullRequestNumber;
+    readonly event: PullRequestReviewEvent;
+    readonly commitId?: GitSha;
+    readonly body?: string;
+    readonly comments?: readonly PullRequestReviewDraftComment[];
+  }): Promise<PullRequestReview>;
+
+  listPullRequestStacks(
+    input: {
+      readonly repo: RepoRef;
+      readonly pullNumber?: PullRequestNumber;
+    } & Pagination,
+  ): Promise<readonly PullRequestStack[]>;
+
+  getPullRequestStack(input: {
+    readonly repo: RepoRef;
+    readonly stackNumber: PullRequestStackNumber;
+  }): Promise<PullRequestStack>;
+
+  createPullRequestStack(input: {
+    readonly repo: RepoRef;
+    /** Pull request numbers ordered from the bottom of the stack to the top. */
+    readonly pullNumbers: readonly PullRequestNumber[];
+  }): Promise<PullRequestStack>;
+
+  addPullRequestsToStack(input: {
+    readonly repo: RepoRef;
+    readonly stackNumber: PullRequestStackNumber;
+    /** Pull request numbers to append, ordered from the current top upward. */
+    readonly pullNumbers: readonly PullRequestNumber[];
+  }): Promise<PullRequestStack>;
+
+  unstackPullRequests(input: {
+    readonly repo: RepoRef;
+    readonly stackNumber: PullRequestStackNumber;
+  }): Promise<PullRequestStack | null>;
+
+  mergePullRequestAsync(input: {
+    readonly repo: RepoRef;
+    readonly pullNumber: PullRequestNumber;
+    readonly mergeMethod?: PullRequestMergeMethod;
+    readonly mergeAction?: PullRequestMergeAction;
+    readonly commitTitle?: string;
+    readonly commitMessage?: string;
+    readonly expectedHeadSha?: GitSha;
+  }): Promise<AsyncMergeResult>;
+
+  getPullRequestMergeResult(input: {
+    readonly repo: RepoRef;
+    readonly pullNumber: PullRequestNumber;
+    readonly mergeId: AsyncMergeId;
+  }): Promise<AsyncMergeResult>;
 
   // Labels, assignees, and milestone are managed through GitHub's issues API
   // for both issues and pull requests: a pull request's number is its issue

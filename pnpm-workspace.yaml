@@ -2,6 +2,11 @@ packages:
   - 'packages/*'
   - 'libs/marlow/*'
   - 'apps/*'
+allowBuilds:
+  '@swc/core': true
+  esbuild: true
+  nx: true
+  unrs-resolver: true
 overrides:
   axios: 1.18.0
   'brace-expansion@^1.0.0': 1.1.16

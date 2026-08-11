@@ -53,6 +53,21 @@ describe('write endpoints require confirm: true', () => {
     ['/repos/nrwl/nx/pulls/1/close', {}],
     ['/repos/nrwl/nx/pulls/1/labels', { labels: ['bug'] }],
     ['/repos/nrwl/nx/pulls/1/assignees', { assignees: ['octocat'] }],
+    [
+      '/repos/nrwl/nx/pulls/1/comments',
+      {
+        body: 'x',
+        commitId: 'a'.repeat(40),
+        path: 'src/index.ts',
+        line: 1,
+        side: 'RIGHT',
+      },
+    ],
+    ['/repos/nrwl/nx/pulls/1/comments/2/replies', { body: 'x' }],
+    ['/repos/nrwl/nx/pulls/1/reviews', { event: 'COMMENT', body: 'Summary' }],
+    ['/repos/nrwl/nx/stacks', { pullNumbers: [1, 2] }],
+    ['/repos/nrwl/nx/stacks/1/add', { pullNumbers: [2] }],
+    ['/repos/nrwl/nx/stacks/1/unstack', {}],
   ])('POST %s without confirm returns 400', async (url, payload) => {
     await start();
     const response = await server.inject({ method: 'POST', url, payload });
@@ -71,6 +86,7 @@ describe('write endpoints require confirm: true', () => {
     ['DELETE', '/repos/nrwl/nx/pulls/1/assignees', { assignees: ['octocat'] }],
     ['PUT', '/repos/nrwl/nx/pulls/1/milestone', { milestone: 1 }],
     ['DELETE', '/repos/nrwl/nx/pulls/1/milestone', {}],
+    ['PUT', '/repos/nrwl/nx/pulls/1/merge-async', {}],
   ])('%s %s without confirm returns 400', async (method, url, payload) => {
     await start();
     const response = await server.inject({

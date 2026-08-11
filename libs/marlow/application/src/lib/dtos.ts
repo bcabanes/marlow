@@ -204,6 +204,17 @@ export interface MilestoneResult {
   readonly milestone: MilestoneRef | null;
 }
 
+/** A pull request's membership and position within a GitHub PR stack. */
+export interface PullRequestStackMembership {
+  readonly id: number;
+  readonly number: number;
+  readonly size: number;
+  /** One-based position, where 1 is the pull request closest to the base. */
+  readonly position: number;
+  readonly baseRef: string;
+  readonly baseSha: string;
+}
+
 /**
  * A pull request as it appears in a list: everything except the (potentially
  * large) body. Fetch a single pull request to get the body.
@@ -214,9 +225,13 @@ export interface PullRequestSummary {
   readonly state: string;
   readonly author: string | null;
   readonly headRef: string;
+  /** SHA at the pull request's head, used to anchor diff comments. */
+  readonly headSha: string;
   readonly baseRef: string;
   readonly draft: boolean;
   readonly merged: boolean;
+  /** Null for a standalone pull request. */
+  readonly stack: PullRequestStackMembership | null;
   readonly labels: readonly string[];
   readonly assignees: readonly string[];
   /** Logins asked to review but who have not necessarily acted yet. */
@@ -259,6 +274,44 @@ export interface PullRequestFile {
   readonly additions: number;
   readonly deletions: number;
   readonly changes: number;
+}
+
+/** A compact pull request entry within a stack, ordered bottom to top. */
+export interface PullRequestStackEntry {
+  readonly number: number;
+  readonly state: string;
+  readonly draft: boolean;
+  readonly mergedAt: string | null;
+  readonly headRef: string;
+  readonly headSha: string;
+}
+
+/** A repository-scoped GitHub pull-request stack. */
+export interface PullRequestStack {
+  readonly id: number;
+  readonly number: number;
+  readonly nodeId: string;
+  readonly url: string;
+  readonly baseRef: string;
+  readonly open: boolean;
+  readonly createdAt: string;
+  /** Pull requests ordered from the stack's base toward its top. */
+  readonly pullRequests: readonly PullRequestStackEntry[];
+}
+
+export type PullRequestMergeMethod = 'merge' | 'squash' | 'rebase';
+export type PullRequestMergeAction = 'default' | 'direct_merge' | 'merge_queue';
+export type AsyncMergeStatus = 'pending' | 'merged' | 'enqueued' | 'failed';
+
+/** Provider-independent view of GitHub's asynchronous merge state. */
+export interface AsyncMergeResult {
+  readonly status: AsyncMergeStatus;
+  readonly message: string;
+  readonly id?: string;
+  readonly mergeMethod?: PullRequestMergeMethod;
+  readonly mergeAction?: PullRequestMergeAction;
+  readonly expectedHeadSha?: string;
+  readonly mergeCommitSha?: string;
 }
 
 export interface StatusEntry {

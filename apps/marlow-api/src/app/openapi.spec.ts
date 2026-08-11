@@ -35,7 +35,9 @@ describe('openapi document', () => {
       'DELETE',
     ]);
     server.addHook('onRoute', (route) => {
-      const methods = Array.isArray(route.method) ? route.method : [route.method];
+      const methods = Array.isArray(route.method)
+        ? route.method
+        : [route.method];
       for (const method of methods) {
         if (documentedMethods.has(method)) {
           registered.add(`${method} ${toOpenApiPath(route.url)}`);
@@ -69,5 +71,28 @@ describe('openapi document', () => {
         expect(responses.default).toBeTruthy();
       }
     }
+  });
+
+  it('documents the conditional review-comment write contracts', () => {
+    const doc = buildOpenApiDocument();
+    const schemas = doc.components.schemas;
+
+    expect(schemas.CreatePullRequestReviewComment.oneOf).toHaveLength(2);
+    expect(schemas.CreatePullRequestReviewComment.additionalProperties).toBe(
+      false,
+    );
+    expect(schemas.CreatePullRequestReview.allOf).toHaveLength(1);
+    expect(schemas.CreatePullRequestReview.required).toEqual([
+      'confirm',
+      'event',
+    ]);
+    expect(
+      doc.paths['/repos/{owner}/{repo}/pulls/{pullNumber}/comments'].post,
+    ).toBeTruthy();
+    expect(
+      doc.paths[
+        '/repos/{owner}/{repo}/pulls/{pullNumber}/comments/{commentId}/replies'
+      ].post,
+    ).toBeTruthy();
   });
 });

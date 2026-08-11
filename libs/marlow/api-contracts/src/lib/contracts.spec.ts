@@ -3,6 +3,9 @@ import {
   addLabelsBodySchema,
   assigneesBodySchema,
   createIssueBodySchema,
+  createPullRequestReviewBodySchema,
+  createPullRequestReviewCommentBodySchema,
+  createPullRequestReviewCommentReplyBodySchema,
   listIssuesQuerySchema,
   paginationQuerySchema,
   repoParamsSchema,
@@ -89,9 +92,9 @@ describe('updateIssueBodySchema', () => {
     expect(
       updateIssueBodySchema.safeParse({ confirm: true, state: 'open' }).success,
     ).toBe(true);
-    expect(
-      updateIssueBodySchema.safeParse({ title: 'New' }).success,
-    ).toBe(false);
+    expect(updateIssueBodySchema.safeParse({ title: 'New' }).success).toBe(
+      false,
+    );
   });
 
   it('restricts state and stateReason to the known enums', () => {
@@ -139,6 +142,149 @@ describe('metadata bodies', () => {
     expect(
       setMilestoneBodySchema.safeParse({ confirm: true, milestone: 1.5 })
         .success,
+    ).toBe(false);
+  });
+});
+
+describe('pull-request review comment bodies', () => {
+  const common = {
+    confirm: true,
+    body: 'Please rename this',
+    commitId: 'a'.repeat(40),
+    path: 'src/index.ts',
+  } as const;
+
+  it('accepts line, range, and file targets', () => {
+    expect(
+      createPullRequestReviewCommentBodySchema.safeParse({
+        ...common,
+        line: 12,
+        side: 'RIGHT',
+      }).success,
+    ).toBe(true);
+    expect(
+      createPullRequestReviewCommentBodySchema.safeParse({
+        ...common,
+        subjectType: 'line',
+        line: 12,
+        side: 'RIGHT',
+        startLine: 10,
+        startSide: 'RIGHT',
+      }).success,
+    ).toBe(true);
+    expect(
+      createPullRequestReviewCommentBodySchema.safeParse({
+        ...common,
+        subjectType: 'file',
+      }).success,
+    ).toBe(true);
+  });
+
+  it('rejects unpaired ranges, line fields on files, position, and snake_case', () => {
+    for (const payload of [
+      { ...common, line: 12, side: 'RIGHT', startLine: 10 },
+      { ...common, subjectType: 'file', line: 12, side: 'RIGHT' },
+      { ...common, line: 12, side: 'RIGHT', position: 4 },
+      { ...common, line: 12, side: 'RIGHT', start_line: 10 },
+    ]) {
+      expect(
+        createPullRequestReviewCommentBodySchema.safeParse(payload).success,
+      ).toBe(false);
+    }
+  });
+
+  it('requires non-empty bounded comment and reply bodies', () => {
+    expect(
+      createPullRequestReviewCommentBodySchema.safeParse({
+        ...common,
+        body: '',
+        line: 12,
+        side: 'RIGHT',
+      }).success,
+    ).toBe(false);
+    expect(
+      createPullRequestReviewCommentReplyBodySchema.safeParse({
+        confirm: true,
+        body: 'x'.repeat(65536),
+      }).success,
+    ).toBe(true);
+    expect(
+      createPullRequestReviewCommentReplyBodySchema.safeParse({
+        confirm: true,
+        body: 'x'.repeat(65537),
+      }).success,
+    ).toBe(false);
+  });
+});
+
+describe('createPullRequestReviewBodySchema', () => {
+  it('requires a body for COMMENT and REQUEST_CHANGES but not APPROVE', () => {
+    expect(
+      createPullRequestReviewBodySchema.safeParse({
+        confirm: true,
+        event: 'COMMENT',
+      }).success,
+    ).toBe(false);
+    expect(
+      createPullRequestReviewBodySchema.safeParse({
+        confirm: true,
+        event: 'REQUEST_CHANGES',
+        body: 'Please update this',
+      }).success,
+    ).toBe(true);
+    expect(
+      createPullRequestReviewBodySchema.safeParse({
+        confirm: true,
+        event: 'APPROVE',
+        body: '',
+      }).success,
+    ).toBe(true);
+  });
+
+  it('accepts optional commitId and an empty comments array', () => {
+    const parsed = createPullRequestReviewBodySchema.parse({
+      confirm: true,
+      event: 'APPROVE',
+      commitId: 'a'.repeat(40),
+      comments: [],
+    });
+    expect(parsed.commitId).toBe('a'.repeat(40));
+    expect(parsed.comments).toEqual([]);
+  });
+
+  it('strictly validates nested line/range comments', () => {
+    expect(
+      createPullRequestReviewBodySchema.safeParse({
+        confirm: true,
+        event: 'COMMENT',
+        body: 'Summary',
+        comments: [
+          {
+            body: 'Inline',
+            path: 'src/index.ts',
+            line: 12,
+            side: 'RIGHT',
+            startLine: 10,
+            startSide: 'RIGHT',
+          },
+        ],
+      }).success,
+    ).toBe(true);
+    expect(
+      createPullRequestReviewBodySchema.safeParse({
+        confirm: true,
+        event: 'COMMENT',
+        body: 'Summary',
+        comments: [
+          {
+            body: 'Inline',
+            path: 'src/index.ts',
+            line: 12,
+            side: 'RIGHT',
+            subjectType: 'file',
+          },
+        ],
+      }).success,
     ).toBe(false);
   });
 });

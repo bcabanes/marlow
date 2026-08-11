@@ -13,7 +13,7 @@ no MCP server, no UI, no database, no background workers.
 
 ```
 2  repositories on the allow-list      7  Nx projects (1 app, 6 libraries)
-28 repo-scoped use cases               0  tokens written to disk
+40 repo-scoped use cases               0  tokens written to disk
 ```
 
 ## Why
@@ -123,9 +123,10 @@ is. Two ways to mint one, each with the permissions pre-filled.
 **Fine-grained token — least privilege.** Scoped to a single owner and only the
 permissions Marlow actually uses:
 
-**[→ Create a fine-grained token](https://github.com/settings/personal-access-tokens/new?name=Marlow&description=Least-privilege%20access%20to%20allow-listed%20repos&target_name=nrwl&contents=read&issues=write&pull_requests=write&statuses=read)**
+**[→ Create a fine-grained token](https://github.com/settings/personal-access-tokens/new?name=Marlow&description=Least-privilege%20access%20to%20allow-listed%20repos&target_name=nrwl&contents=write&issues=write&pull_requests=write&statuses=read)**
 
-The link pre-selects the `nrwl` resource owner and **Contents** (read),
+The link pre-selects the `nrwl` resource owner and **Contents** (read/write,
+required by GitHub's asynchronous merge endpoint),
 **Issues** (read/write), **Pull requests** (read/write), and **Commit statuses**
 (read); **Metadata** (read) is added automatically. Two things the URL can't
 pre-fill, so set them on the page:
@@ -166,47 +167,57 @@ allow-listed repositories. Errors share one shape:
 `GET /openapi.json` (OpenAPI 3.1), so an agent can discover every route at
 runtime.
 
-| Method | Path                                               | Does                            |
-| ------ | -------------------------------------------------- | ------------------------------- |
-| GET    | `/openapi.json`                                    | OpenAPI 3.1 description of this API |
-| GET    | `/health`                                          | Liveness check                  |
-| GET    | `/repos`                                           | List the allow-listed repos     |
-| GET    | `/repos/:owner/:repo/permissions`                  | Token's permissions on the repo |
-| GET    | `/repos/:owner/:repo/tree?ref=&recursive=`         | List the tree at a ref          |
-| GET    | `/repos/:owner/:repo/contents/*?ref=`              | Read a file                     |
-| GET    | `/repos/:owner/:repo/search/code?query=`           | Search code, scoped to the repo |
-| GET    | `/repos/:owner/:repo/commits?ref=&path=`           | List commits (subject line only) |
-| GET    | `/repos/:owner/:repo/commits/:sha`                 | A commit with stats and files   |
-| GET    | `/repos/:owner/:repo/issues?state=`                | List issues (summaries, no body) |
-| GET    | `/repos/:owner/:repo/issues/:issueNumber`          | Get one issue                   |
-| POST   | `/repos/:owner/:repo/issues`                       | Create an issue · **confirm**   |
-| POST   | `/repos/:owner/:repo/issues/:issueNumber/close`    | Close an issue · **confirm**    |
-| GET    | `/repos/:owner/:repo/issues/:issueNumber/comments` | List issue comments             |
-| POST   | `/repos/:owner/:repo/issues/:issueNumber/comments` | Comment on an issue · **confirm** |
-| PATCH  | `/repos/:owner/:repo/issues/:issueNumber`          | Edit an issue's title/body/state · **confirm** |
-| POST   | `/repos/:owner/:repo/issues/:issueNumber/labels`   | Add labels to an issue · **confirm** |
-| DELETE | `/repos/:owner/:repo/issues/:issueNumber/labels/:name` | Remove a label from an issue · **confirm** |
-| POST   | `/repos/:owner/:repo/issues/:issueNumber/assignees` | Add assignees to an issue · **confirm** |
-| DELETE | `/repos/:owner/:repo/issues/:issueNumber/assignees` | Remove assignees from an issue · **confirm** |
-| PUT    | `/repos/:owner/:repo/issues/:issueNumber/milestone` | Set an issue's milestone · **confirm** |
-| DELETE | `/repos/:owner/:repo/issues/:issueNumber/milestone` | Clear an issue's milestone · **confirm** |
-| GET    | `/repos/:owner/:repo/pulls?state=`                 | List pull requests (summaries, no body) |
-| GET    | `/repos/:owner/:repo/pulls/:pullNumber`            | Get one pull request            |
-| POST   | `/repos/:owner/:repo/pulls`                        | Open a pull request · **confirm** |
-| POST   | `/repos/:owner/:repo/pulls/:pullNumber/close`      | Close a pull request · **confirm** |
-| PATCH  | `/repos/:owner/:repo/pulls/:pullNumber`            | Update a PR's title/body/base · **confirm** |
-| GET    | `/repos/:owner/:repo/pulls/:pullNumber/files`      | Files changed in a PR           |
-| GET    | `/repos/:owner/:repo/pulls/:pullNumber/commits`    | Commits in a PR                 |
-| GET    | `/repos/:owner/:repo/pulls/:pullNumber/comments`   | Conversation comments on a PR   |
-| GET    | `/repos/:owner/:repo/pulls/:pullNumber/reviews`    | Reviews (verdicts) on a PR      |
-| POST   | `/repos/:owner/:repo/pulls/:pullNumber/labels`     | Add labels to a PR · **confirm** |
-| DELETE | `/repos/:owner/:repo/pulls/:pullNumber/labels/:name` | Remove a label from a PR · **confirm** |
-| POST   | `/repos/:owner/:repo/pulls/:pullNumber/assignees`  | Add assignees to a PR · **confirm** |
-| DELETE | `/repos/:owner/:repo/pulls/:pullNumber/assignees`  | Remove assignees from a PR · **confirm** |
-| PUT    | `/repos/:owner/:repo/pulls/:pullNumber/milestone`  | Set a PR's milestone · **confirm** |
-| DELETE | `/repos/:owner/:repo/pulls/:pullNumber/milestone`  | Clear a PR's milestone · **confirm** |
-| GET    | `/repos/:owner/:repo/commit-status?ref=`           | Combined commit status          |
-| GET    | `/repos/:owner/:repo/check-runs?ref=`              | Check runs for a ref            |
+| Method | Path                                                                | Does                                                           |
+| ------ | ------------------------------------------------------------------- | -------------------------------------------------------------- |
+| GET    | `/openapi.json`                                                     | OpenAPI 3.1 description of this API                            |
+| GET    | `/health`                                                           | Liveness check                                                 |
+| GET    | `/repos`                                                            | List the allow-listed repos                                    |
+| GET    | `/repos/:owner/:repo/permissions`                                   | Token's permissions on the repo                                |
+| GET    | `/repos/:owner/:repo/tree?ref=&recursive=`                          | List the tree at a ref                                         |
+| GET    | `/repos/:owner/:repo/contents/*?ref=`                               | Read a file                                                    |
+| GET    | `/repos/:owner/:repo/search/code?query=`                            | Search code, scoped to the repo                                |
+| GET    | `/repos/:owner/:repo/commits?ref=&path=`                            | List commits (subject line only)                               |
+| GET    | `/repos/:owner/:repo/commits/:sha`                                  | A commit with stats and files                                  |
+| GET    | `/repos/:owner/:repo/issues?state=`                                 | List issues (summaries, no body)                               |
+| GET    | `/repos/:owner/:repo/issues/:issueNumber`                           | Get one issue                                                  |
+| POST   | `/repos/:owner/:repo/issues`                                        | Create an issue · **confirm**                                  |
+| POST   | `/repos/:owner/:repo/issues/:issueNumber/close`                     | Close an issue · **confirm**                                   |
+| GET    | `/repos/:owner/:repo/issues/:issueNumber/comments`                  | List issue comments                                            |
+| POST   | `/repos/:owner/:repo/issues/:issueNumber/comments`                  | Comment on an issue · **confirm**                              |
+| PATCH  | `/repos/:owner/:repo/issues/:issueNumber`                           | Edit an issue's title/body/state · **confirm**                 |
+| POST   | `/repos/:owner/:repo/issues/:issueNumber/labels`                    | Add labels to an issue · **confirm**                           |
+| DELETE | `/repos/:owner/:repo/issues/:issueNumber/labels/:name`              | Remove a label from an issue · **confirm**                     |
+| POST   | `/repos/:owner/:repo/issues/:issueNumber/assignees`                 | Add assignees to an issue · **confirm**                        |
+| DELETE | `/repos/:owner/:repo/issues/:issueNumber/assignees`                 | Remove assignees from an issue · **confirm**                   |
+| PUT    | `/repos/:owner/:repo/issues/:issueNumber/milestone`                 | Set an issue's milestone · **confirm**                         |
+| DELETE | `/repos/:owner/:repo/issues/:issueNumber/milestone`                 | Clear an issue's milestone · **confirm**                       |
+| GET    | `/repos/:owner/:repo/pulls?state=`                                  | List pull requests (summaries, no body)                        |
+| GET    | `/repos/:owner/:repo/pulls/:pullNumber`                             | Get one pull request                                           |
+| POST   | `/repos/:owner/:repo/pulls`                                         | Open a pull request · **confirm**                              |
+| PUT    | `/repos/:owner/:repo/pulls/:pullNumber/merge-async`                 | Atomically merge a PR and its stack below it · **confirm**     |
+| GET    | `/repos/:owner/:repo/pulls/:pullNumber/merge-async/:mergeId`        | Poll an asynchronous merge                                     |
+| POST   | `/repos/:owner/:repo/pulls/:pullNumber/close`                       | Close a pull request · **confirm**                             |
+| PATCH  | `/repos/:owner/:repo/pulls/:pullNumber`                             | Update a PR's title/body/base · **confirm**                    |
+| GET    | `/repos/:owner/:repo/pulls/:pullNumber/files`                       | Files changed in a PR                                          |
+| GET    | `/repos/:owner/:repo/pulls/:pullNumber/commits`                     | Commits in a PR                                                |
+| GET    | `/repos/:owner/:repo/pulls/:pullNumber/comments`                    | Review comments anchored to a PR diff                          |
+| POST   | `/repos/:owner/:repo/pulls/:pullNumber/comments`                    | Add an immediate line/range/file review comment · **confirm**  |
+| POST   | `/repos/:owner/:repo/pulls/:pullNumber/comments/:commentId/replies` | Reply to a top-level review comment · **confirm**              |
+| GET    | `/repos/:owner/:repo/pulls/:pullNumber/reviews`                     | Reviews (verdicts) on a PR                                     |
+| POST   | `/repos/:owner/:repo/pulls/:pullNumber/reviews`                     | Submit a review, optionally with inline comments · **confirm** |
+| POST   | `/repos/:owner/:repo/pulls/:pullNumber/labels`                      | Add labels to a PR · **confirm**                               |
+| DELETE | `/repos/:owner/:repo/pulls/:pullNumber/labels/:name`                | Remove a label from a PR · **confirm**                         |
+| POST   | `/repos/:owner/:repo/pulls/:pullNumber/assignees`                   | Add assignees to a PR · **confirm**                            |
+| DELETE | `/repos/:owner/:repo/pulls/:pullNumber/assignees`                   | Remove assignees from a PR · **confirm**                       |
+| PUT    | `/repos/:owner/:repo/pulls/:pullNumber/milestone`                   | Set a PR's milestone · **confirm**                             |
+| DELETE | `/repos/:owner/:repo/pulls/:pullNumber/milestone`                   | Clear a PR's milestone · **confirm**                           |
+| GET    | `/repos/:owner/:repo/stacks?pullNumber=`                            | List PR stacks, optionally filtering by member PR              |
+| GET    | `/repos/:owner/:repo/stacks/:stackNumber`                           | Get one PR stack                                               |
+| POST   | `/repos/:owner/:repo/stacks`                                        | Link an ordered PR chain as a stack · **confirm**              |
+| POST   | `/repos/:owner/:repo/stacks/:stackNumber/add`                       | Append PRs to a stack · **confirm**                            |
+| POST   | `/repos/:owner/:repo/stacks/:stackNumber/unstack`                   | Remove eligible PRs from a stack · **confirm**                 |
+| GET    | `/repos/:owner/:repo/commit-status?ref=`                            | Combined commit status                                         |
+| GET    | `/repos/:owner/:repo/check-runs?ref=`                               | Check runs for a ref                                           |
 
 Endpoints marked **confirm** require `{ "confirm": true }` in the request body.
 
@@ -216,13 +227,37 @@ and pull requests omit the `body`, and commits carry only the subject line
 full body or message. Paginated lists default to 30 rows per page (`perPage`,
 max 100).
 
-Pull requests carry `requestedReviewers` (logins) and `requestedTeams` (slugs)
-alongside `assignees`, mirroring GitHub's PR object. The reviews endpoint returns
-each verdict's reviewer, `state` (`APPROVED` / `CHANGES_REQUESTED` / `COMMENTED` /
-`DISMISSED` / `PENDING`), note, and timestamp. GitHub's REST API exposes no per-PR
-code-owner resolution; owners it auto-requested already appear in
-`requestedReviewers`/`requestedTeams`, and the `CODEOWNERS` file itself is readable
-via the contents endpoint.
+Pull requests carry `headSha`, `requestedReviewers` (logins), and
+`requestedTeams` (slugs) alongside `assignees`, mirroring GitHub's PR object.
+Use the observed `headSha` as `commitId` when adding an immediate review comment;
+it is also recommended for grouped reviews with inline comments so a concurrent
+head update cannot silently change the intended anchor.
+
+Review-comment writes use modern blob line anchors: `RIGHT` for additions and
+current/context lines, `LEFT` for deletions, and paired `startLine`/`startSide`
+for ranges. File comments use `subjectType: "file"` without line fields. The
+legacy diff `position` field is deliberately unsupported. Grouped reviews must
+provide an explicit `event` (`COMMENT`, `APPROVE`, or `REQUEST_CHANGES`) and are
+submitted immediately; Marlow does not create pending reviews.
+
+Pull requests also carry a nullable `stack` object with the repository-scoped
+stack number, total size, one-based position, and ultimate base branch/SHA.
+Stack endpoints accept pull request numbers from bottom to top. GitHub's stacked
+PR feature is currently in public preview and returns `404` when it is not
+enabled for the repository. To merge a stacked PR, submit the asynchronous merge
+endpoint and poll its returned `id` while `status` is `pending`; GitHub merges or
+queues every PR through the selected position atomically.
+
+GitHub provides no idempotency key for these writes. A network failure can leave
+the outcome ambiguous, and the shared Octokit client may retry some failures, so
+inspect the PR's comments/reviews before retrying. Finding a matching comment is
+useful evidence, not a formal exactly-once guarantee.
+
+The reviews endpoint returns each verdict's reviewer, `state` (`APPROVED` /
+`CHANGES_REQUESTED` / `COMMENTED` / `DISMISSED` / `PENDING`), note, and
+timestamp. GitHub's REST API exposes no per-PR code-owner resolution; owners it
+auto-requested already appear in `requestedReviewers`/`requestedTeams`, and the
+`CODEOWNERS` file itself is readable via the contents endpoint.
 
 ### Discovery for agents
 

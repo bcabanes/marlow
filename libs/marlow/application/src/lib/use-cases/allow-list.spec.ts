@@ -2,6 +2,7 @@ import { DomainError, Result } from '@org/marlow-domain';
 import { describe, expect, it } from 'vitest';
 import {
   GitHubRepositoryPort,
+  addPullRequestsToStack,
   addAssignees,
   addLabels,
   checkPermissions,
@@ -11,11 +12,14 @@ import {
   createIssue,
   createIssueComment,
   createPullRequest,
+  createPullRequestStack,
   getCombinedStatus,
   getCommit,
   getFileContents,
   getIssue,
   getPullRequest,
+  getPullRequestMergeResult,
+  getPullRequestStack,
   listCheckRuns,
   listCommits,
   listIssueComments,
@@ -24,13 +28,16 @@ import {
   listPullRequestCommits,
   listPullRequestFiles,
   listPullRequestReviews,
+  listPullRequestStacks,
   listPullRequests,
   listTree,
+  mergePullRequestAsync,
   removeAssignees,
   removeLabel,
   searchCode,
   setMilestone,
   updateIssue,
+  unstackPullRequests,
 } from '../../index.js';
 
 // A port whose every method throws if invoked. A use case that rejects a repo
@@ -97,8 +104,7 @@ const invocations: ReadonlyArray<readonly [string, Invoke]> = [
   ],
   [
     'setMilestone',
-    () =>
-      setMilestone(throwingPort)({ ...repo, issueNumber: 1, milestone: 1 }),
+    () => setMilestone(throwingPort)({ ...repo, issueNumber: 1, milestone: 1 }),
   ],
   [
     'clearMilestone',
@@ -147,6 +153,48 @@ const invocations: ReadonlyArray<readonly [string, Invoke]> = [
   [
     'listPullRequestReviews',
     () => listPullRequestReviews(throwingPort)({ ...repo, pullNumber: 1 }),
+  ],
+  [
+    'listPullRequestStacks',
+    () => listPullRequestStacks(throwingPort)({ ...repo }),
+  ],
+  [
+    'getPullRequestStack',
+    () => getPullRequestStack(throwingPort)({ ...repo, stackNumber: 1 }),
+  ],
+  [
+    'createPullRequestStack',
+    () =>
+      createPullRequestStack(throwingPort)({
+        ...repo,
+        pullNumbers: [1, 2],
+      }),
+  ],
+  [
+    'addPullRequestsToStack',
+    () =>
+      addPullRequestsToStack(throwingPort)({
+        ...repo,
+        stackNumber: 1,
+        pullNumbers: [2],
+      }),
+  ],
+  [
+    'unstackPullRequests',
+    () => unstackPullRequests(throwingPort)({ ...repo, stackNumber: 1 }),
+  ],
+  [
+    'mergePullRequestAsync',
+    () => mergePullRequestAsync(throwingPort)({ ...repo, pullNumber: 1 }),
+  ],
+  [
+    'getPullRequestMergeResult',
+    () =>
+      getPullRequestMergeResult(throwingPort)({
+        ...repo,
+        pullNumber: 1,
+        mergeId: '630b9d5e-3f2a-4f7e-8b0c-2d5f9a8c1e42',
+      }),
   ],
   [
     'getCombinedStatus',

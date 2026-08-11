@@ -4,6 +4,9 @@ import {
   clearMilestone,
   closePullRequest,
   createPullRequest,
+  createPullRequestReview,
+  createPullRequestReviewComment,
+  createPullRequestReviewCommentReply,
   getPullRequest,
   listPullRequestComments,
   listPullRequestCommits,
@@ -20,10 +23,14 @@ import {
   assigneesBodySchema,
   confirmBodySchema,
   createPullRequestBodySchema,
+  createPullRequestReviewBodySchema,
+  createPullRequestReviewCommentBodySchema,
+  createPullRequestReviewCommentReplyBodySchema,
   listPullRequestsQuerySchema,
   paginationQuerySchema,
   pullLabelParamsSchema,
   pullNumberParamsSchema,
+  pullReviewCommentParamsSchema,
   repoParamsSchema,
   setMilestoneBodySchema,
   updatePullRequestBodySchema,
@@ -168,6 +175,69 @@ export const registerPullsRoutes = (
     },
   );
 
+  fastify.post(
+    '/repos/:owner/:repo/pulls/:pullNumber/comments',
+    async (request, reply) => {
+      const { owner, repo, pullNumber } = pullNumberParamsSchema.parse(
+        request.params,
+      );
+      const body = createPullRequestReviewCommentBodySchema.parse(request.body);
+      const port = await deps.getGitHubPort();
+      const comment = unwrapResult(
+        await createPullRequestReviewComment(port)(
+          body.subjectType === 'file'
+            ? {
+                owner,
+                repo,
+                pullNumber,
+                body: body.body,
+                commitId: body.commitId,
+                path: body.path,
+                subjectType: 'file',
+              }
+            : {
+                owner,
+                repo,
+                pullNumber,
+                body: body.body,
+                commitId: body.commitId,
+                path: body.path,
+                subjectType: body.subjectType,
+                line: body.line,
+                side: body.side,
+                startLine: body.startLine,
+                startSide: body.startSide,
+              },
+        ),
+      );
+      reply.code(201);
+      return comment;
+    },
+  );
+
+  fastify.post(
+    '/repos/:owner/:repo/pulls/:pullNumber/comments/:commentId/replies',
+    async (request, reply) => {
+      const { owner, repo, pullNumber, commentId } =
+        pullReviewCommentParamsSchema.parse(request.params);
+      const body = createPullRequestReviewCommentReplyBodySchema.parse(
+        request.body,
+      );
+      const port = await deps.getGitHubPort();
+      const comment = unwrapResult(
+        await createPullRequestReviewCommentReply(port)({
+          owner,
+          repo,
+          pullNumber,
+          commentId,
+          body: body.body,
+        }),
+      );
+      reply.code(201);
+      return comment;
+    },
+  );
+
   fastify.get(
     '/repos/:owner/:repo/pulls/:pullNumber/reviews',
     async (request) => {
@@ -183,6 +253,28 @@ export const registerPullsRoutes = (
           pullNumber,
           page,
           perPage,
+        }),
+      );
+    },
+  );
+
+  fastify.post(
+    '/repos/:owner/:repo/pulls/:pullNumber/reviews',
+    async (request) => {
+      const { owner, repo, pullNumber } = pullNumberParamsSchema.parse(
+        request.params,
+      );
+      const body = createPullRequestReviewBodySchema.parse(request.body);
+      const port = await deps.getGitHubPort();
+      return unwrapResult(
+        await createPullRequestReview(port)({
+          owner,
+          repo,
+          pullNumber,
+          event: body.event,
+          commitId: body.commitId,
+          body: body.body,
+          comments: body.comments,
         }),
       );
     },

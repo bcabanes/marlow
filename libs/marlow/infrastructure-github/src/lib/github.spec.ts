@@ -1,8 +1,12 @@
 import { GitHubPortError } from '@org/marlow-application';
 import type {
+  FilePath,
+  GitRef,
+  GitSha,
   IssueNumber,
   PullRequestNumber,
   RepoRef,
+  ReviewCommentId,
 } from '@org/marlow-domain';
 import type { Octokit } from 'octokit';
 import { RequestError } from 'octokit';
@@ -52,6 +56,55 @@ describe('mapGitHubError', () => {
 });
 
 describe('createGitHubRepositoryAdapter', () => {
+  it('maps headSha from pull list, detail, create, and update responses', async () => {
+    const pull = {
+      number: 42,
+      title: 'A change',
+      state: 'open',
+      body: null,
+      user: { login: 'octocat' },
+      head: { ref: 'feature', sha: 'a'.repeat(40) },
+      base: { ref: 'main' },
+      draft: false,
+      merged_at: null,
+      labels: [],
+      assignees: [],
+      milestone: null,
+      created_at: '2020-01-01T00:00:00Z',
+      updated_at: '2020-01-02T00:00:00Z',
+    };
+    const list = vi.fn().mockResolvedValue({ data: [pull] });
+    const get = vi.fn().mockResolvedValue({ data: pull });
+    const create = vi.fn().mockResolvedValue({ data: pull });
+    const update = vi.fn().mockResolvedValue({ data: pull });
+    const octokit = {
+      rest: { pulls: { list, get, create, update } },
+    } as unknown as Octokit;
+    const adapter = createGitHubRepositoryAdapter(octokit);
+
+    const listed = await adapter.listPullRequests({ repo, state: 'open' });
+    const detailed = await adapter.getPullRequest({
+      repo,
+      pullNumber: 42 as PullRequestNumber,
+    });
+    const created = await adapter.createPullRequest({
+      repo,
+      title: 'A change',
+      head: 'feature' as GitRef,
+      base: 'main' as GitRef,
+    });
+    const updated = await adapter.updatePullRequest({
+      repo,
+      pullNumber: 42 as PullRequestNumber,
+      title: 'A revised change',
+    });
+
+    expect(listed[0].headSha).toBe('a'.repeat(40));
+    expect(detailed.headSha).toBe('a'.repeat(40));
+    expect(created.headSha).toBe('a'.repeat(40));
+    expect(updated.headSha).toBe('a'.repeat(40));
+  });
+
   it('maps an issue and never exposes the raw payload', async () => {
     const get = vi.fn().mockResolvedValue({
       data: {
@@ -278,7 +331,7 @@ describe('createGitHubRepositoryAdapter', () => {
         state: 'open',
         body: null,
         user: { login: 'octocat' },
-        head: { ref: 'feature' },
+        head: { ref: 'feature', sha: 'a'.repeat(40) },
         base: { ref: 'main' },
         draft: false,
         merged_at: null,
@@ -300,6 +353,7 @@ describe('createGitHubRepositoryAdapter', () => {
     expect(pull.labels).toEqual(['wip']);
     expect(pull.assignees).toEqual(['hubot']);
     expect(pull.milestone).toEqual({ number: 1, title: 'v1' });
+    expect(pull.headSha).toBe('a'.repeat(40));
   });
 
   it('surfaces requested reviewers and teams as separate arrays', async () => {
@@ -310,7 +364,7 @@ describe('createGitHubRepositoryAdapter', () => {
         state: 'open',
         body: null,
         user: { login: 'octocat' },
-        head: { ref: 'feature' },
+        head: { ref: 'feature', sha: 'b'.repeat(40) },
         base: { ref: 'main' },
         draft: false,
         merged_at: null,
@@ -333,6 +387,7 @@ describe('createGitHubRepositoryAdapter', () => {
 
     expect(pull.requestedReviewers).toEqual(['reviewer-1', 'reviewer-2']);
     expect(pull.requestedTeams).toEqual(['platform']);
+    expect(pull.headSha).toBe('b'.repeat(40));
   });
 
   it('maps pull request reviews to reviewer, state, note, and timestamp', async () => {
@@ -446,6 +501,159 @@ describe('createGitHubRepositoryAdapter', () => {
     });
   });
 
+  it('creates an immediate range review comment with modern line anchors', async () => {
+    const createReviewComment = vi
+      .fn()
+      .mockResolvedValue({ data: baseReviewComment(556) });
+    const octokit = {
+      rest: { pulls: { createReviewComment } },
+    } as unknown as Octokit;
+    const adapter = createGitHubRepositoryAdapter(octokit);
+
+    const comment = await adapter.createPullRequestReviewComment({
+      repo,
+      pullNumber: 42 as PullRequestNumber,
+      body: 'Please rename this',
+      commitId: 'a'.repeat(40) as GitSha,
+      target: {
+        subjectType: 'line',
+        path: 'src/index.ts' as FilePath,
+        line: 12,
+        side: 'RIGHT',
+        startLine: 10,
+        startSide: 'RIGHT',
+      },
+    });
+
+    expect(comment.id).toBe(556);
+    expect(JSON.stringify(comment)).not.toContain('secret_internal_field');
+    expect(createReviewComment).toHaveBeenCalledWith({
+      owner: 'nrwl',
+      repo: 'nx',
+      pull_number: 42,
+      body: 'Please rename this',
+      commit_id: 'a'.repeat(40),
+      path: 'src/index.ts',
+      subject_type: 'line',
+      line: 12,
+      side: 'RIGHT',
+      start_line: 10,
+      start_side: 'RIGHT',
+    });
+  });
+
+  it('creates a file review comment without line fields', async () => {
+    const createReviewComment = vi
+      .fn()
+      .mockResolvedValue({ data: baseReviewComment(557, 'file') });
+    const adapter = createGitHubRepositoryAdapter({
+      rest: { pulls: { createReviewComment } },
+    } as unknown as Octokit);
+
+    await adapter.createPullRequestReviewComment({
+      repo,
+      pullNumber: 42 as PullRequestNumber,
+      body: 'This file needs documentation',
+      commitId: 'a'.repeat(40) as GitSha,
+      target: {
+        subjectType: 'file',
+        path: 'src/index.ts' as FilePath,
+      },
+    });
+
+    expect(createReviewComment).toHaveBeenCalledWith({
+      owner: 'nrwl',
+      repo: 'nx',
+      pull_number: 42,
+      body: 'This file needs documentation',
+      commit_id: 'a'.repeat(40),
+      path: 'src/index.ts',
+      subject_type: 'file',
+    });
+  });
+
+  it('replies through the dedicated top-level review-comment endpoint', async () => {
+    const createReplyForReviewComment = vi
+      .fn()
+      .mockResolvedValue({ data: baseReviewComment(558) });
+    const adapter = createGitHubRepositoryAdapter({
+      rest: { pulls: { createReplyForReviewComment } },
+    } as unknown as Octokit);
+
+    const reply = await adapter.createPullRequestReviewCommentReply({
+      repo,
+      pullNumber: 42 as PullRequestNumber,
+      commentId: 555 as ReviewCommentId,
+      body: 'Agreed',
+    });
+
+    expect(reply.id).toBe(558);
+    expect(createReplyForReviewComment).toHaveBeenCalledWith({
+      owner: 'nrwl',
+      repo: 'nx',
+      pull_number: 42,
+      comment_id: 555,
+      body: 'Agreed',
+    });
+  });
+
+  it('submits a grouped review and omits an absent commit ID', async () => {
+    const createReview = vi.fn().mockResolvedValue({
+      data: {
+        id: 903,
+        user: { login: 'octocat' },
+        state: 'COMMENTED',
+        body: 'Summary',
+        submitted_at: '2020-01-03T00:00:00Z',
+      },
+    });
+    const adapter = createGitHubRepositoryAdapter({
+      rest: { pulls: { createReview } },
+    } as unknown as Octokit);
+
+    const review = await adapter.createPullRequestReview({
+      repo,
+      pullNumber: 42 as PullRequestNumber,
+      event: 'COMMENT',
+      body: 'Summary',
+      comments: [
+        {
+          body: 'Inline',
+          path: 'src/index.ts' as FilePath,
+          line: 12,
+          side: 'RIGHT',
+          startLine: 10,
+          startSide: 'RIGHT',
+        },
+      ],
+    });
+
+    expect(review).toEqual({
+      id: 903,
+      author: 'octocat',
+      state: 'COMMENTED',
+      body: 'Summary',
+      submittedAt: '2020-01-03T00:00:00Z',
+    });
+    expect(createReview).toHaveBeenCalledWith({
+      owner: 'nrwl',
+      repo: 'nx',
+      pull_number: 42,
+      event: 'COMMENT',
+      body: 'Summary',
+      comments: [
+        {
+          body: 'Inline',
+          path: 'src/index.ts',
+          line: 12,
+          side: 'RIGHT',
+          start_line: 10,
+          start_side: 'RIGHT',
+        },
+      ],
+    });
+  });
+
   it('surfaces the commit and changed-file counts on a pull request', async () => {
     const get = vi.fn().mockResolvedValue({
       data: {
@@ -454,7 +662,7 @@ describe('createGitHubRepositoryAdapter', () => {
         state: 'open',
         body: null,
         user: { login: 'octocat' },
-        head: { ref: 'feature' },
+        head: { ref: 'feature', sha: 'c'.repeat(40) },
         base: { ref: 'main' },
         draft: false,
         merged_at: null,
@@ -524,5 +732,29 @@ function baseIssue(number: number) {
     comments: 0,
     created_at: '2020-01-01T00:00:00Z',
     updated_at: '2020-01-01T00:00:00Z',
+  };
+}
+
+function baseReviewComment(id: number, subjectType = 'line') {
+  return {
+    id,
+    user: { login: 'octocat' },
+    body: 'Review comment',
+    path: 'src/index.ts',
+    line: subjectType === 'file' ? null : 12,
+    original_line: subjectType === 'file' ? null : 12,
+    side: subjectType === 'file' ? null : 'RIGHT',
+    start_line: null,
+    start_side: null,
+    diff_hunk: '@@ -10,3 +10,3 @@',
+    commit_id: 'a'.repeat(40),
+    original_commit_id: 'a'.repeat(40),
+    in_reply_to_id: null,
+    pull_request_review_id: 901,
+    html_url: `https://github.com/nrwl/nx/pull/42#discussion_r${id}`,
+    subject_type: subjectType,
+    created_at: '2020-01-03T00:00:00Z',
+    updated_at: '2020-01-03T00:00:00Z',
+    secret_internal_field: 'should-not-appear',
   };
 }

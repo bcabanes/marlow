@@ -9,28 +9,23 @@ optional field. List endpoints return trimmed `*Summary`/`*ListItem` rows with
 no body — fetch a single resource for the full body.
 
 ## meta
-
 GET /openapi.json -> OpenAPI 3.1 document
 GET /health -> { "status": "ok" }
 
 ## repositories
-
 GET /repos -> Repository[]
 GET /repos/{owner}/{repo}/permissions -> PermissionCheck
 
 ## contents
-
 GET /repos/{owner}/{repo}/tree ?ref,recursive -> TreeResult
 GET /repos/{owner}/{repo}/contents/{path} ?ref -> FileContents
 GET /repos/{owner}/{repo}/search/code ?query,page,perPage -> CodeSearchResult
 
 ## commits
-
 GET /repos/{owner}/{repo}/commits ?ref,path,page,perPage -> CommitListItem[]
 GET /repos/{owner}/{repo}/commits/{sha} -> CommitDetail
 
 ## issues
-
 GET /repos/{owner}/{repo}/issues ?state,page,perPage -> IssueSummary[]
 GET /repos/{owner}/{repo}/issues/{issueNumber} -> Issue
 POST /repos/{owner}/{repo}/issues body{confirm,title,body?,labels?} -> Issue
@@ -46,16 +41,20 @@ PUT /repos/{owner}/{repo}/issues/{issueNumber}/milestone body{confirm,milestone}
 DELETE /repos/{owner}/{repo}/issues/{issueNumber}/milestone body{confirm} -> MilestoneResult
 
 ## pulls
-
 GET /repos/{owner}/{repo}/pulls ?state,page,perPage -> PullRequestSummary[]
 GET /repos/{owner}/{repo}/pulls/{pullNumber} -> PullRequest
 POST /repos/{owner}/{repo}/pulls body{confirm,title,head,base,body?,draft?} -> PullRequest
+PUT /repos/{owner}/{repo}/pulls/{pullNumber}/merge-async body{confirm,mergeMethod?,mergeAction?,commitTitle?,commitMessage?,expectedHeadSha?} -> AsyncMergeResult
+GET /repos/{owner}/{repo}/pulls/{pullNumber}/merge-async/{mergeId} -> AsyncMergeResult
 POST /repos/{owner}/{repo}/pulls/{pullNumber}/close body{confirm} -> PullRequest
 PATCH /repos/{owner}/{repo}/pulls/{pullNumber} body{confirm,title?,body?,base?} -> PullRequest
 GET /repos/{owner}/{repo}/pulls/{pullNumber}/files ?page,perPage -> PullRequestFile[]
 GET /repos/{owner}/{repo}/pulls/{pullNumber}/commits ?page,perPage -> CommitListItem[]
 GET /repos/{owner}/{repo}/pulls/{pullNumber}/comments ?page,perPage -> ReviewComment[]
+POST /repos/{owner}/{repo}/pulls/{pullNumber}/comments body{confirm,body,commitId,path,subjectType?,line?,side?,startLine?,startSide?} -> ReviewComment
+POST /repos/{owner}/{repo}/pulls/{pullNumber}/comments/{commentId}/replies body{confirm,body} -> ReviewComment
 GET /repos/{owner}/{repo}/pulls/{pullNumber}/reviews ?page,perPage -> PullRequestReview[]
+POST /repos/{owner}/{repo}/pulls/{pullNumber}/reviews body{confirm,event,commitId?,body?,comments?} -> PullRequestReview
 POST /repos/{owner}/{repo}/pulls/{pullNumber}/labels body{confirm,labels} -> LabelSet
 DELETE /repos/{owner}/{repo}/pulls/{pullNumber}/labels/{name} body{confirm} -> LabelSet
 POST /repos/{owner}/{repo}/pulls/{pullNumber}/assignees body{confirm,assignees} -> AssigneeSet
@@ -63,10 +62,15 @@ DELETE /repos/{owner}/{repo}/pulls/{pullNumber}/assignees body{confirm,assignees
 PUT /repos/{owner}/{repo}/pulls/{pullNumber}/milestone body{confirm,milestone} -> MilestoneResult
 DELETE /repos/{owner}/{repo}/pulls/{pullNumber}/milestone body{confirm} -> MilestoneResult
 
-## statuses
+## stacks
+GET /repos/{owner}/{repo}/stacks ?pullNumber,page,perPage -> PullRequestStack[]
+GET /repos/{owner}/{repo}/stacks/{stackNumber} -> PullRequestStack
+POST /repos/{owner}/{repo}/stacks body{confirm,pullNumbers} -> PullRequestStack
+POST /repos/{owner}/{repo}/stacks/{stackNumber}/add body{confirm,pullNumbers} -> PullRequestStack
+POST /repos/{owner}/{repo}/stacks/{stackNumber}/unstack body{confirm} -> PullRequestStack | null
 
+## statuses
 GET /repos/{owner}/{repo}/commit-status ?ref -> CombinedStatus
 
 ## checks
-
 GET /repos/{owner}/{repo}/check-runs ?ref -> CheckRun[]

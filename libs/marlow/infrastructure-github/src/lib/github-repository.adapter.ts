@@ -1,7 +1,9 @@
 import { GitHubPortError, GitHubRepositoryPort } from '@org/marlow-application';
 import type { Octokit } from 'octokit';
+import { RequestError } from 'octokit';
 import { mapGitHubError } from './github-error-mapper.js';
 import {
+  mapAsyncMergeResult,
   mapAssigneeSet,
   mapCheckRuns,
   mapCodeSearch,
@@ -18,10 +20,37 @@ import {
   mapPullRequest,
   mapPullRequestFile,
   mapPullRequestReview,
+  mapPullRequestStack,
   mapPullRequestSummary,
   mapReviewComment,
   mapTree,
 } from './github-dto-mapper.js';
+
+const STACKS_API_HEADERS = {
+  'X-GitHub-Api-Version': '2026-03-10',
+} as const;
+
+type PullRequestStackPayload = Parameters<typeof mapPullRequestStack>[0];
+type AsyncMergePayload = Parameters<typeof mapAsyncMergeResult>[0];
+
+const isAsyncMergePayload = (value: unknown): value is AsyncMergePayload => {
+  if (typeof value !== 'object' || value === null) return false;
+  const candidate = value as Record<string, unknown>;
+  if (
+    candidate.status !== 'pending' &&
+    candidate.status !== 'merged' &&
+    candidate.status !== 'enqueued' &&
+    candidate.status !== 'failed'
+  ) {
+    return false;
+  }
+  if (typeof candidate.details !== 'object' || candidate.details === null) {
+    return false;
+  }
+  return (
+    typeof (candidate.details as Record<string, unknown>).message === 'string'
+  );
+};
 
 /**
  * Octokit-backed implementation of {@link GitHubRepositoryPort}.
@@ -37,6 +66,33 @@ export const createGitHubRepositoryAdapter = (
     try {
       return await fn();
     } catch (error) {
+      throw mapGitHubError(error);
+    }
+  };
+
+  const callAsyncMerge = async (
+    fn: () => Promise<{ readonly data: unknown }>,
+  ) => {
+    try {
+      const { data } = await fn();
+      if (!isAsyncMergePayload(data)) {
+        throw new GitHubPortError(
+          'unprocessable',
+          'GitHub returned an invalid asynchronous merge result',
+        );
+      }
+      return mapAsyncMergeResult(data);
+    } catch (error) {
+      // GitHub returns useful terminal/pollable results with 400 and 409.
+      // Preserve those normalized results instead of turning them into errors.
+      if (
+        error instanceof RequestError &&
+        (error.status === 400 || error.status === 409) &&
+        isAsyncMergePayload(error.response?.data)
+      ) {
+        return mapAsyncMergeResult(error.response.data);
+      }
+      if (error instanceof GitHubPortError) throw error;
       throw mapGitHubError(error);
     }
   };
@@ -216,6 +272,7 @@ export const createGitHubRepositoryAdapter = (
           owner: repo.owner,
           repo: repo.repo,
           state,
+          headers: STACKS_API_HEADERS,
           ...(page === undefined ? {} : { page }),
           ...(perPage === undefined ? {} : { per_page: perPage }),
         });
@@ -228,6 +285,7 @@ export const createGitHubRepositoryAdapter = (
           owner: repo.owner,
           repo: repo.repo,
           pull_number: pullNumber,
+          headers: STACKS_API_HEADERS,
         });
         return mapPullRequest(data);
       }),
@@ -240,6 +298,7 @@ export const createGitHubRepositoryAdapter = (
           title,
           head,
           base,
+          headers: STACKS_API_HEADERS,
           ...(body === undefined ? {} : { body }),
           ...(draft === undefined ? {} : { draft }),
         });
@@ -253,6 +312,7 @@ export const createGitHubRepositoryAdapter = (
           repo: repo.repo,
           pull_number: pullNumber,
           state: 'closed',
+          headers: STACKS_API_HEADERS,
         });
         return mapPullRequest(data);
       }),
@@ -263,6 +323,7 @@ export const createGitHubRepositoryAdapter = (
           owner: repo.owner,
           repo: repo.repo,
           pull_number: pullNumber,
+          headers: STACKS_API_HEADERS,
           ...(title === undefined ? {} : { title }),
           ...(body === undefined ? {} : { body }),
           ...(base === undefined ? {} : { base }),
@@ -309,6 +370,55 @@ export const createGitHubRepositoryAdapter = (
         return data.map(mapReviewComment);
       }),
 
+    createPullRequestReviewComment: ({
+      repo,
+      pullNumber,
+      body,
+      commitId,
+      target,
+    }) =>
+      call(async () => {
+        const { data } = await octokit.rest.pulls.createReviewComment({
+          owner: repo.owner,
+          repo: repo.repo,
+          pull_number: pullNumber,
+          body,
+          commit_id: commitId,
+          path: target.path,
+          subject_type: target.subjectType,
+          ...(target.subjectType === 'file'
+            ? {}
+            : {
+                line: target.line,
+                side: target.side,
+                ...(target.startLine === undefined
+                  ? {}
+                  : { start_line: target.startLine }),
+                ...(target.startSide === undefined
+                  ? {}
+                  : { start_side: target.startSide }),
+              }),
+        });
+        return mapReviewComment(data);
+      }),
+
+    createPullRequestReviewCommentReply: ({
+      repo,
+      pullNumber,
+      commentId,
+      body,
+    }) =>
+      call(async () => {
+        const { data } = await octokit.rest.pulls.createReplyForReviewComment({
+          owner: repo.owner,
+          repo: repo.repo,
+          pull_number: pullNumber,
+          comment_id: commentId,
+          body,
+        });
+        return mapReviewComment(data);
+      }),
+
     listPullRequestReviews: ({ repo, pullNumber, page, perPage }) =>
       call(async () => {
         const { data } = await octokit.rest.pulls.listReviews({
@@ -320,6 +430,161 @@ export const createGitHubRepositoryAdapter = (
         });
         return data.map(mapPullRequestReview);
       }),
+
+    createPullRequestReview: ({
+      repo,
+      pullNumber,
+      event,
+      commitId,
+      body,
+      comments,
+    }) =>
+      call(async () => {
+        const { data } = await octokit.rest.pulls.createReview({
+          owner: repo.owner,
+          repo: repo.repo,
+          pull_number: pullNumber,
+          event,
+          ...(commitId === undefined ? {} : { commit_id: commitId }),
+          ...(body === undefined ? {} : { body }),
+          ...(comments === undefined
+            ? {}
+            : {
+                comments: comments.map((comment) => ({
+                  body: comment.body,
+                  path: comment.path,
+                  line: comment.line,
+                  side: comment.side,
+                  ...(comment.startLine === undefined
+                    ? {}
+                    : { start_line: comment.startLine }),
+                  ...(comment.startSide === undefined
+                    ? {}
+                    : { start_side: comment.startSide }),
+                })),
+              }),
+        });
+        return mapPullRequestReview(data);
+      }),
+
+    listPullRequestStacks: ({ repo, pullNumber, page, perPage }) =>
+      call(async () => {
+        const { data } = await octokit.request(
+          'GET /repos/{owner}/{repo}/stacks',
+          {
+            owner: repo.owner,
+            repo: repo.repo,
+            headers: STACKS_API_HEADERS,
+            ...(pullNumber === undefined ? {} : { pull_request: pullNumber }),
+            ...(page === undefined ? {} : { page }),
+            ...(perPage === undefined ? {} : { per_page: perPage }),
+          },
+        );
+        return (data as readonly PullRequestStackPayload[]).map(
+          mapPullRequestStack,
+        );
+      }),
+
+    getPullRequestStack: ({ repo, stackNumber }) =>
+      call(async () => {
+        const { data } = await octokit.request(
+          'GET /repos/{owner}/{repo}/stacks/{stack_number}',
+          {
+            owner: repo.owner,
+            repo: repo.repo,
+            stack_number: stackNumber,
+            headers: STACKS_API_HEADERS,
+          },
+        );
+        return mapPullRequestStack(data as PullRequestStackPayload);
+      }),
+
+    createPullRequestStack: ({ repo, pullNumbers }) =>
+      call(async () => {
+        const { data } = await octokit.request(
+          'POST /repos/{owner}/{repo}/stacks',
+          {
+            owner: repo.owner,
+            repo: repo.repo,
+            pull_requests: [...pullNumbers],
+            headers: STACKS_API_HEADERS,
+          },
+        );
+        return mapPullRequestStack(data as PullRequestStackPayload);
+      }),
+
+    addPullRequestsToStack: ({ repo, stackNumber, pullNumbers }) =>
+      call(async () => {
+        const { data } = await octokit.request(
+          'POST /repos/{owner}/{repo}/stacks/{stack_number}/add',
+          {
+            owner: repo.owner,
+            repo: repo.repo,
+            stack_number: stackNumber,
+            pull_requests: [...pullNumbers],
+            headers: STACKS_API_HEADERS,
+          },
+        );
+        return mapPullRequestStack(data as PullRequestStackPayload);
+      }),
+
+    unstackPullRequests: ({ repo, stackNumber }) =>
+      call(async () => {
+        const { data } = await octokit.request(
+          'POST /repos/{owner}/{repo}/stacks/{stack_number}/unstack',
+          {
+            owner: repo.owner,
+            repo: repo.repo,
+            stack_number: stackNumber,
+            headers: STACKS_API_HEADERS,
+          },
+        );
+        return data === undefined || data === null || data === ''
+          ? null
+          : mapPullRequestStack(data as PullRequestStackPayload);
+      }),
+
+    mergePullRequestAsync: ({
+      repo,
+      pullNumber,
+      mergeMethod,
+      mergeAction,
+      commitTitle,
+      commitMessage,
+      expectedHeadSha,
+    }) =>
+      callAsyncMerge(() =>
+        octokit.request(
+          'PUT /repos/{owner}/{repo}/pulls/{pull_number}/merge-async',
+          {
+            owner: repo.owner,
+            repo: repo.repo,
+            pull_number: pullNumber,
+            headers: STACKS_API_HEADERS,
+            ...(mergeMethod === undefined ? {} : { merge_method: mergeMethod }),
+            ...(mergeAction === undefined ? {} : { merge_action: mergeAction }),
+            ...(commitTitle === undefined ? {} : { commit_title: commitTitle }),
+            ...(commitMessage === undefined
+              ? {}
+              : { commit_message: commitMessage }),
+            ...(expectedHeadSha === undefined ? {} : { sha: expectedHeadSha }),
+          },
+        ),
+      ),
+
+    getPullRequestMergeResult: ({ repo, pullNumber, mergeId }) =>
+      callAsyncMerge(() =>
+        octokit.request(
+          'GET /repos/{owner}/{repo}/pulls/{pull_number}/merge-async/{uuid}',
+          {
+            owner: repo.owner,
+            repo: repo.repo,
+            pull_number: pullNumber,
+            uuid: mergeId,
+            headers: STACKS_API_HEADERS,
+          },
+        ),
+      ),
 
     addLabels: ({ repo, issueNumber, labels }) =>
       call(async () => {
