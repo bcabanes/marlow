@@ -218,7 +218,7 @@ describe('pull-request review comment bodies', () => {
 });
 
 describe('createPullRequestReviewBodySchema', () => {
-  it('requires a body for COMMENT and REQUEST_CHANGES but not APPROVE', () => {
+  it('requires a body for submitted comments and changes but not APPROVE or PENDING', () => {
     expect(
       createPullRequestReviewBodySchema.safeParse({
         confirm: true,
@@ -239,6 +239,46 @@ describe('createPullRequestReviewBodySchema', () => {
         body: '',
       }).success,
     ).toBe(true);
+    expect(
+      createPullRequestReviewBodySchema.safeParse({
+        confirm: true,
+        event: 'PENDING',
+      }).success,
+    ).toBe(true);
+  });
+
+  it('accepts explicit or GitHub-style omitted event for a pending review', () => {
+    const parsed = createPullRequestReviewBodySchema.parse({
+      confirm: true,
+      event: 'PENDING',
+      commitId: 'a'.repeat(40),
+      comments: [
+        {
+          body: 'First inline comment',
+          path: 'src/first.ts',
+          line: 12,
+          side: 'RIGHT',
+        },
+        {
+          body: 'Second inline comment',
+          path: 'src/second.ts',
+          line: 8,
+          side: 'LEFT',
+        },
+      ],
+    });
+
+    expect(parsed.event).toBe('PENDING');
+    expect(parsed.comments).toHaveLength(2);
+    expect(
+      createPullRequestReviewBodySchema.safeParse({
+        confirm: true,
+        comments: parsed.comments,
+      }).success,
+    ).toBe(true);
+    expect(
+      createPullRequestReviewBodySchema.safeParse({ event: 'PENDING' }).success,
+    ).toBe(false);
   });
 
   it('accepts optional commitId and an empty comments array', () => {

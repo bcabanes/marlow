@@ -286,6 +286,7 @@ describe('marlow-api', () => {
       state: 'COMMENTED',
       body: 'Summary',
       submittedAt: '2020-01-01T00:00:00Z',
+      htmlUrl: 'https://github.com/nrwl/nx/pull/42#pullrequestreview-901',
     };
     const createPullRequestReview = vi.fn().mockResolvedValue(review);
     await start(buildDeps({ createPullRequestReview }));
@@ -325,6 +326,97 @@ describe('marlow-api', () => {
           startSide: undefined,
         },
       ],
+    });
+  });
+
+  it('creates a pending review with multiple inline comments when event is omitted', async () => {
+    const review = {
+      id: 902,
+      author: 'octocat',
+      state: 'PENDING',
+      body: null,
+      submittedAt: null,
+      htmlUrl: 'https://github.com/nrwl/nx/pull/42#pullrequestreview-902',
+    };
+    const createPullRequestReview = vi.fn().mockResolvedValue(review);
+    await start(buildDeps({ createPullRequestReview }));
+
+    const response = await server.inject({
+      method: 'POST',
+      url: '/repos/nrwl/nx/pulls/42/reviews',
+      payload: {
+        confirm: true,
+        comments: [
+          {
+            body: 'First inline',
+            path: 'src/first.ts',
+            line: 12,
+            side: 'RIGHT',
+          },
+          {
+            body: 'Second inline',
+            path: 'src/second.ts',
+            line: 8,
+            side: 'LEFT',
+          },
+        ],
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual(review);
+    expect(createPullRequestReview).toHaveBeenCalledWith({
+      repo: { owner: 'nrwl', repo: 'nx' },
+      pullNumber: 42,
+      event: 'PENDING',
+      commitId: undefined,
+      body: undefined,
+      comments: [
+        {
+          body: 'First inline',
+          path: 'src/first.ts',
+          line: 12,
+          side: 'RIGHT',
+          startLine: undefined,
+          startSide: undefined,
+        },
+        {
+          body: 'Second inline',
+          path: 'src/second.ts',
+          line: 8,
+          side: 'LEFT',
+          startLine: undefined,
+          startSide: undefined,
+        },
+      ],
+    });
+  });
+
+  it('returns a clear conflict when the authenticated user has a pending review', async () => {
+    const createPullRequestReview = vi
+      .fn()
+      .mockRejectedValue(
+        new GitHubPortError(
+          'pending_review_exists',
+          'GitHub rejected the review because a pending review already exists',
+          { status: 422 },
+        ),
+      );
+    await start(buildDeps({ createPullRequestReview }));
+
+    const response = await server.inject({
+      method: 'POST',
+      url: '/repos/nrwl/nx/pulls/42/reviews',
+      payload: { confirm: true, event: 'PENDING' },
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json()).toEqual({
+      error: {
+        code: 'conflict',
+        message:
+          'Authenticated GitHub user already has a pending review for this pull request',
+      },
     });
   });
 

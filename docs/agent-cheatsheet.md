@@ -54,7 +54,7 @@ GET /repos/{owner}/{repo}/pulls/{pullNumber}/comments ?page,perPage -> ReviewCom
 POST /repos/{owner}/{repo}/pulls/{pullNumber}/comments body{confirm,body,commitId,path,subjectType?,line?,side?,startLine?,startSide?} -> ReviewComment
 POST /repos/{owner}/{repo}/pulls/{pullNumber}/comments/{commentId}/replies body{confirm,body} -> ReviewComment
 GET /repos/{owner}/{repo}/pulls/{pullNumber}/reviews ?page,perPage -> PullRequestReview[]
-POST /repos/{owner}/{repo}/pulls/{pullNumber}/reviews body{confirm,event,commitId?,body?,comments?} -> PullRequestReview
+POST /repos/{owner}/{repo}/pulls/{pullNumber}/reviews body{confirm,event?,commitId?,body?,comments?} -> PullRequestReview
 POST /repos/{owner}/{repo}/pulls/{pullNumber}/labels body{confirm,labels} -> LabelSet
 DELETE /repos/{owner}/{repo}/pulls/{pullNumber}/labels/{name} body{confirm} -> LabelSet
 POST /repos/{owner}/{repo}/pulls/{pullNumber}/assignees body{confirm,assignees} -> AssigneeSet

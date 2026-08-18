@@ -266,6 +266,8 @@ export interface PullRequestReview {
   readonly state: string;
   readonly body: string | null;
   readonly submittedAt: string | null;
+  /** GitHub page for inspecting the review in the pull-request interface. */
+  readonly htmlUrl: string;
 }
 
 export interface PullRequestFile {

@@ -271,7 +271,8 @@ export const registerPullsRoutes = (
           owner,
           repo,
           pullNumber,
-          event: body.event,
+          // Match GitHub: omitting event creates a pending review.
+          event: body.event ?? 'PENDING',
           commitId: body.commitId,
           body: body.body,
           comments: body.comments,

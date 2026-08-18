@@ -18,6 +18,21 @@ const kindForStatus = (status: number): GitHubErrorKind => {
   }
 };
 
+const hasExistingPendingReviewError = (data: unknown): boolean => {
+  if (typeof data !== 'object' || data === null) return false;
+  const errors = (data as { readonly errors?: unknown }).errors;
+  if (!Array.isArray(errors)) return false;
+
+  return errors.some((error) => {
+    if (typeof error !== 'object' || error === null) return false;
+    const message = (error as { readonly message?: unknown }).message;
+    return (
+      typeof message === 'string' &&
+      message.toLowerCase().includes('one pending review per pull request')
+    );
+  });
+};
+
 /**
  * Translates an arbitrary thrown value from the Octokit client into the
  * application's transport-neutral {@link GitHubPortError}. Raw provider errors
@@ -27,6 +42,17 @@ export const mapGitHubError = (error: unknown): GitHubPortError => {
   if (error instanceof GitHubPortError) return error;
 
   if (error instanceof RequestError) {
+    if (
+      error.status === 422 &&
+      hasExistingPendingReviewError(error.response?.data)
+    ) {
+      return new GitHubPortError(
+        'pending_review_exists',
+        'GitHub rejected the review because a pending review already exists',
+        { status: error.status },
+      );
+    }
+
     const remaining = error.response?.headers?.['x-ratelimit-remaining'];
     const isRateLimited =
       error.status === 429 || (error.status === 403 && remaining === '0');

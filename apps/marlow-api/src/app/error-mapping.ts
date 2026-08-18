@@ -1,6 +1,7 @@
 import { GitHubPortError } from '@org/marlow-application';
 import {
   ApiError,
+  conflict,
   forbidden,
   internal,
   notFound,
@@ -32,6 +33,10 @@ export const githubErrorToApiError = (error: GitHubPortError): ApiError => {
     case 'validation_failed':
     case 'unprocessable':
       return validationFailed('GitHub rejected the request');
+    case 'pending_review_exists':
+      return conflict(
+        'Authenticated GitHub user already has a pending review for this pull request',
+      );
     case 'unavailable':
       return upstreamUnavailable();
     default:

@@ -204,7 +204,7 @@ runtime.
 | POST   | `/repos/:owner/:repo/pulls/:pullNumber/comments`                    | Add an immediate line/range/file review comment · **confirm**  |
 | POST   | `/repos/:owner/:repo/pulls/:pullNumber/comments/:commentId/replies` | Reply to a top-level review comment · **confirm**              |
 | GET    | `/repos/:owner/:repo/pulls/:pullNumber/reviews`                     | Reviews (verdicts) on a PR                                     |
-| POST   | `/repos/:owner/:repo/pulls/:pullNumber/reviews`                     | Submit a review, optionally with inline comments · **confirm** |
+| POST   | `/repos/:owner/:repo/pulls/:pullNumber/reviews`                     | Create pending/submitted review + inline comments · **confirm** |
 | POST   | `/repos/:owner/:repo/pulls/:pullNumber/labels`                      | Add labels to a PR · **confirm**                               |
 | DELETE | `/repos/:owner/:repo/pulls/:pullNumber/labels/:name`                | Remove a label from a PR · **confirm**                         |
 | POST   | `/repos/:owner/:repo/pulls/:pullNumber/assignees`                   | Add assignees to a PR · **confirm**                            |
@@ -236,9 +236,14 @@ head update cannot silently change the intended anchor.
 Review-comment writes use modern blob line anchors: `RIGHT` for additions and
 current/context lines, `LEFT` for deletions, and paired `startLine`/`startSide`
 for ranges. File comments use `subjectType: "file"` without line fields. The
-legacy diff `position` field is deliberately unsupported. Grouped reviews must
-provide an explicit `event` (`COMMENT`, `APPROVE`, or `REQUEST_CHANGES`) and are
-submitted immediately; Marlow does not create pending reviews.
+legacy diff `position` field is deliberately unsupported. As with GitHub,
+omitting `event` creates a pending review; Marlow also accepts explicit
+`PENDING`. `COMMENT`, `APPROVE`, and `REQUEST_CHANGES` retain their submitted
+review behavior. Pending reviews omit GitHub's event field, leaving the review
+and every supplied inline comment unsubmitted and visible only to the
+authenticated reviewer until submission, without review notifications. The
+returned `htmlUrl` opens the review in GitHub so it can be inspected, edited,
+and submitted.
 
 Pull requests also carry a nullable `stack` object with the repository-scoped
 stack number, total size, one-based position, and ultimate base branch/SHA.

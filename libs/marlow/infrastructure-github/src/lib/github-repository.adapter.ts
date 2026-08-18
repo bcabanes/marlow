@@ -444,7 +444,8 @@ export const createGitHubRepositoryAdapter = (
           owner: repo.owner,
           repo: repo.repo,
           pull_number: pullNumber,
-          event,
+          // GitHub creates a pending review only when `event` is omitted.
+          ...(event === 'PENDING' ? {} : { event }),
           ...(commitId === undefined ? {} : { commit_id: commitId }),
           ...(body === undefined ? {} : { body }),
           ...(comments === undefined

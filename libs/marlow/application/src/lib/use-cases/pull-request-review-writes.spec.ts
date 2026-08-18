@@ -136,27 +136,34 @@ describe('pull-request review write use cases', () => {
     });
   });
 
-  it('omits an absent review commit and validates every comment path', async () => {
+  it('forwards a pending review with every validated comment path', async () => {
     const review = {
       id: 901,
       author: 'octocat',
-      state: 'COMMENTED',
-      body: 'Summary',
-      submittedAt: '2020-01-01T00:00:00Z',
+      state: 'PENDING',
+      body: null,
+      submittedAt: null,
+      htmlUrl:
+        'https://github.com/nrwl/nx/pull/42#pullrequestreview-901',
     };
     const create = vi.fn().mockResolvedValue(review);
     const port = fakePort({ createPullRequestReview: create });
 
     const result = await createPullRequestReview(port)({
       ...allowed,
-      event: 'COMMENT',
-      body: 'Summary',
+      event: 'PENDING',
       comments: [
         {
-          body: 'Inline',
-          path: 'src/index.ts',
+          body: 'First inline',
+          path: 'src/first.ts',
           line: 12,
           side: 'RIGHT',
+        },
+        {
+          body: 'Second inline',
+          path: 'src/second.ts',
+          line: 8,
+          side: 'LEFT',
         },
       ],
     });
@@ -165,14 +172,21 @@ describe('pull-request review write use cases', () => {
     expect(create).toHaveBeenCalledWith({
       repo: { owner: 'nrwl', repo: 'nx' },
       pullNumber: 42,
-      event: 'COMMENT',
-      body: 'Summary',
+      event: 'PENDING',
       comments: [
         {
-          body: 'Inline',
-          path: 'src/index.ts',
+          body: 'First inline',
+          path: 'src/first.ts',
           line: 12,
           side: 'RIGHT',
+          startLine: undefined,
+          startSide: undefined,
+        },
+        {
+          body: 'Second inline',
+          path: 'src/second.ts',
+          line: 8,
+          side: 'LEFT',
           startLine: undefined,
           startSide: undefined,
         },

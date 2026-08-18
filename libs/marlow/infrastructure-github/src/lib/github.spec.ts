@@ -19,6 +19,7 @@ const repo = { owner: 'nrwl', repo: 'nx' } as RepoRef;
 const requestError = (
   status: number,
   headers: Record<string, string> = {},
+  data: unknown = {},
 ): RequestError =>
   new RequestError(`status ${status}`, status, {
     request: { method: 'GET', url: 'https://api.github.com/x', headers: {} },
@@ -26,7 +27,7 @@ const requestError = (
       status,
       url: 'https://api.github.com/x',
       headers,
-      data: {},
+      data,
     },
   });
 
@@ -52,6 +53,28 @@ describe('mapGitHubError', () => {
     const mapped = mapGitHubError(raw);
     expect(mapped.message).not.toContain('ghp_supersecret');
     expect(mapped.message).toContain('404');
+  });
+
+  it('recognizes GitHub\'s one-pending-review conflict without exposing raw data', () => {
+    const mapped = mapGitHubError(
+      requestError(422, {}, {
+        message: 'Validation Failed',
+        errors: [
+          {
+            resource: 'PullRequestReview',
+            field: 'user_id',
+            code: 'custom',
+            message:
+              'user_id can only have one pending review per pull request',
+          },
+        ],
+      }),
+    );
+
+    expect(mapped.kind).toBe('pending_review_exists');
+    expect(mapped.message).toBe(
+      'GitHub rejected the review because a pending review already exists',
+    );
   });
 });
 
@@ -398,6 +421,8 @@ describe('createGitHubRepositoryAdapter', () => {
           user: { login: 'octocat' },
           state: 'CHANGES_REQUESTED',
           body: 'Please rename this',
+          html_url:
+            'https://github.com/nrwl/nx/pull/42#pullrequestreview-901',
           submitted_at: '2020-01-03T00:00:00Z',
           secret_internal_field: 'should-not-appear',
         },
@@ -406,6 +431,8 @@ describe('createGitHubRepositoryAdapter', () => {
           user: null,
           state: 'APPROVED',
           body: '',
+          html_url:
+            'https://github.com/nrwl/nx/pull/42#pullrequestreview-902',
           submitted_at: null,
         },
       ],
@@ -426,6 +453,7 @@ describe('createGitHubRepositoryAdapter', () => {
       state: 'CHANGES_REQUESTED',
       body: 'Please rename this',
       submittedAt: '2020-01-03T00:00:00Z',
+      htmlUrl: 'https://github.com/nrwl/nx/pull/42#pullrequestreview-901',
     });
     expect(reviews[1].author).toBeNull();
     expect(reviews[1].submittedAt).toBeNull();
@@ -604,6 +632,8 @@ describe('createGitHubRepositoryAdapter', () => {
         user: { login: 'octocat' },
         state: 'COMMENTED',
         body: 'Summary',
+        html_url:
+          'https://github.com/nrwl/nx/pull/42#pullrequestreview-903',
         submitted_at: '2020-01-03T00:00:00Z',
       },
     });
@@ -634,6 +664,7 @@ describe('createGitHubRepositoryAdapter', () => {
       state: 'COMMENTED',
       body: 'Summary',
       submittedAt: '2020-01-03T00:00:00Z',
+      htmlUrl: 'https://github.com/nrwl/nx/pull/42#pullrequestreview-903',
     });
     expect(createReview).toHaveBeenCalledWith({
       owner: 'nrwl',
@@ -649,6 +680,70 @@ describe('createGitHubRepositoryAdapter', () => {
           side: 'RIGHT',
           start_line: 10,
           start_side: 'RIGHT',
+        },
+      ],
+    });
+  });
+
+  it('creates a pending review with multiple comments by omitting GitHub event', async () => {
+    const createReview = vi.fn().mockResolvedValue({
+      data: {
+        id: 904,
+        user: { login: 'octocat' },
+        state: 'PENDING',
+        body: null,
+        html_url:
+          'https://github.com/nrwl/nx/pull/42#pullrequestreview-904',
+      },
+    });
+    const adapter = createGitHubRepositoryAdapter({
+      rest: { pulls: { createReview } },
+    } as unknown as Octokit);
+
+    const review = await adapter.createPullRequestReview({
+      repo,
+      pullNumber: 42 as PullRequestNumber,
+      event: 'PENDING',
+      comments: [
+        {
+          body: 'First inline',
+          path: 'src/first.ts' as FilePath,
+          line: 12,
+          side: 'RIGHT',
+        },
+        {
+          body: 'Second inline',
+          path: 'src/second.ts' as FilePath,
+          line: 8,
+          side: 'LEFT',
+        },
+      ],
+    });
+
+    expect(review).toEqual({
+      id: 904,
+      author: 'octocat',
+      state: 'PENDING',
+      body: null,
+      submittedAt: null,
+      htmlUrl: 'https://github.com/nrwl/nx/pull/42#pullrequestreview-904',
+    });
+    expect(createReview).toHaveBeenCalledWith({
+      owner: 'nrwl',
+      repo: 'nx',
+      pull_number: 42,
+      comments: [
+        {
+          body: 'First inline',
+          path: 'src/first.ts',
+          line: 12,
+          side: 'RIGHT',
+        },
+        {
+          body: 'Second inline',
+          path: 'src/second.ts',
+          line: 8,
+          side: 'LEFT',
         },
       ],
     });

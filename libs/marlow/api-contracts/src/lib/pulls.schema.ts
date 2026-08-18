@@ -194,7 +194,9 @@ export type CreatePullRequestReviewCommentReplyBody = z.infer<
   typeof createPullRequestReviewCommentReplyBodySchema
 >;
 
+/** Review intent; PENDING or an omitted event creates an unsubmitted GitHub review. */
 export const pullRequestReviewEventSchema = z.enum([
+  'PENDING',
   'COMMENT',
   'APPROVE',
   'REQUEST_CHANGES',
@@ -217,11 +219,11 @@ export type PullRequestReviewDraftComment = z.infer<
   typeof pullRequestReviewDraftCommentSchema
 >;
 
-/** Body for a submitted pull-request review, optionally with inline comments. */
+/** Body for a pending or submitted pull-request review with optional inline comments. */
 export const createPullRequestReviewBodySchema = z
   .object({
     confirm: z.literal(true),
-    event: pullRequestReviewEventSchema,
+    event: pullRequestReviewEventSchema.optional(),
     commitId: z.string().min(1).optional(),
     body: z.string().max(65536).optional(),
     comments: z.array(pullRequestReviewDraftCommentSchema).optional(),

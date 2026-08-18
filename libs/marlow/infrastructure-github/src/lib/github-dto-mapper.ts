@@ -161,6 +161,7 @@ interface GhReviewLike {
   readonly state: string;
   readonly body?: string | null;
   readonly submitted_at?: string | null;
+  readonly html_url: string;
 }
 
 interface GhReviewCommentLike {
@@ -405,6 +406,7 @@ export const mapPullRequestReview = (
   state: data.state,
   body: data.body ?? null,
   submittedAt: data.submitted_at ?? null,
+  htmlUrl: data.html_url,
 });
 
 export const mapPullRequestFile = (data: PullFileItem): PullRequestFile => ({

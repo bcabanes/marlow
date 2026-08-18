@@ -82,10 +82,29 @@ describe('openapi document', () => {
       false,
     );
     expect(schemas.CreatePullRequestReview.allOf).toHaveLength(1);
-    expect(schemas.CreatePullRequestReview.required).toEqual([
-      'confirm',
-      'event',
+    expect(schemas.CreatePullRequestReview.required).toEqual(['confirm']);
+    expect(schemas.CreatePullRequestReview.properties.event.enum).toContain(
+      'PENDING',
+    );
+    expect(schemas.PullRequestReview.required).toEqual([
+      'id',
+      'author',
+      'state',
+      'body',
+      'submittedAt',
+      'htmlUrl',
     ]);
+    const createReviewOperation = doc.paths[
+      '/repos/{owner}/{repo}/pulls/{pullNumber}/reviews'
+    ].post as {
+      responses: {
+        '200': { content: { 'application/json': { schema: unknown } } };
+      };
+    };
+    expect(
+      createReviewOperation.responses['200'].content['application/json']
+        .schema,
+    ).toEqual({ $ref: '#/components/schemas/PullRequestReview' });
     expect(
       doc.paths['/repos/{owner}/{repo}/pulls/{pullNumber}/comments'].post,
     ).toBeTruthy();

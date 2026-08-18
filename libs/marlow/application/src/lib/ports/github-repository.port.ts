@@ -40,7 +40,12 @@ import {
 } from '../dtos.js';
 
 export type PullRequestReviewSide = 'LEFT' | 'RIGHT';
-export type PullRequestReviewEvent = 'COMMENT' | 'APPROVE' | 'REQUEST_CHANGES';
+/** Review intent; adapters translate PENDING by omitting GitHub's event field. */
+export type PullRequestReviewEvent =
+  | 'PENDING'
+  | 'COMMENT'
+  | 'APPROVE'
+  | 'REQUEST_CHANGES';
 
 export type PullRequestReviewCommentTarget =
   | {

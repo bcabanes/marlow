@@ -19,9 +19,9 @@ import { API_ERROR_CODES } from '@org/marlow-api-errors';
  * renders the same table as the terse agent cheat-sheet.
  *
  * OpenAPI 3.1 is aligned with JSON Schema 2020-12, so these fragments are valid
- * as-is. Response bodies are deliberately open schemas: the response DTOs are
- * TypeScript interfaces (not Zod), so there is no single source of truth to
- * derive them from yet — each response carries the DTO name in its description.
+ * as-is. Most response bodies are deliberately open schemas because their DTOs
+ * are TypeScript interfaces (not Zod). Responses with a public shape that needs
+ * explicit documentation use `responseSchemas` below.
  */
 
 type ParamLocation = 'path' | 'query';
@@ -297,14 +297,16 @@ export const bodySchemas = {
   CreatePullRequestReview: {
     type: 'object',
     additionalProperties: false,
-    required: ['confirm', 'event'],
+    required: ['confirm'],
     description:
-      'body is required and non-empty for COMMENT and REQUEST_CHANGES. commitId is recommended when comments are present.',
+      'Omitting event matches GitHub and creates an unsubmitted review; explicit PENDING is also accepted. Pending inline comments remain private and do not notify anyone until submission. COMMENT, APPROVE, and REQUEST_CHANGES submit immediately. body is required and non-empty for COMMENT and REQUEST_CHANGES. commitId is recommended when comments are present.',
     properties: {
       confirm: { const: true },
       event: {
         type: 'string',
-        enum: ['COMMENT', 'APPROVE', 'REQUEST_CHANGES'],
+        enum: ['PENDING', 'COMMENT', 'APPROVE', 'REQUEST_CHANGES'],
+        description:
+          'Optional. Omit this or use PENDING for an unsubmitted review. Marlow omits GitHub\'s event field in either case; every submitted-review value is forwarded unchanged.',
       },
       commitId: nonEmptyString,
       body: { type: 'string', maxLength: 65536 },
@@ -396,6 +398,35 @@ export const bodySchemas = {
   },
 } satisfies Record<string, BodySchema>;
 
+const responseSchemas = {
+  PullRequestReview: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['id', 'author', 'state', 'body', 'submittedAt', 'htmlUrl'],
+    properties: {
+      id: positiveInt,
+      author: { type: ['string', 'null'] },
+      state: {
+        type: 'string',
+        description:
+          'PENDING for an unsubmitted review; otherwise GitHub\'s submitted review state.',
+      },
+      body: { type: ['string', 'null'] },
+      submittedAt: {
+        type: ['string', 'null'],
+        format: 'date-time',
+        description: 'Null while the review is pending.',
+      },
+      htmlUrl: {
+        type: 'string',
+        format: 'uri',
+        description:
+          'GitHub URL for inspecting, editing, and submitting the review in the pull-request interface.',
+      },
+    },
+  },
+} as const;
+
 export interface Endpoint {
   readonly method: 'get' | 'post' | 'patch' | 'put' | 'delete';
   readonly path: string;
@@ -403,6 +434,7 @@ export interface Endpoint {
   readonly operationId: string;
   readonly summary: string;
   readonly returns: string;
+  readonly responseBody?: keyof typeof responseSchemas;
   readonly params?: readonly (keyof typeof parameters)[];
   readonly body?: keyof typeof bodySchemas;
   readonly status?: 200 | 201;
@@ -773,8 +805,10 @@ export const endpoints: readonly Endpoint[] = [
     path: '/repos/{owner}/{repo}/pulls/{pullNumber}/reviews',
     tag: 'pulls',
     operationId: 'createPullRequestReview',
-    summary: 'Submit a pull-request review, optionally with inline comments',
+    summary:
+      'Create a pending or submitted pull-request review with optional inline comments',
     returns: 'PullRequestReview',
+    responseBody: 'PullRequestReview',
     params: pullParams,
     body: 'CreatePullRequestReview',
     write: true,
@@ -949,7 +983,13 @@ const operation = (endpoint: Endpoint): Record<string, unknown> => ({
   responses: {
     [String(endpoint.status ?? 200)]: {
       description: endpoint.returns,
-      content: { 'application/json': { schema: {} } },
+      content: {
+        'application/json': {
+          schema: endpoint.responseBody
+            ? { $ref: `#/components/schemas/${endpoint.responseBody}` }
+            : {},
+        },
+      },
     },
     default: { $ref: '#/components/responses/Error' },
   },
@@ -1003,6 +1043,7 @@ export const buildOpenApiDocument = () => {
             },
           },
         },
+        ...responseSchemas,
         ...bodySchemas,
       },
       responses: {

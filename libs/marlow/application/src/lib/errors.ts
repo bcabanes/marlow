@@ -11,6 +11,7 @@ export type GitHubErrorKind =
   | 'not_found'
   | 'rate_limited'
   | 'validation_failed'
+  | 'pending_review_exists'
   | 'unprocessable'
   | 'unavailable'
   | 'unknown';
