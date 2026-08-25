@@ -102,8 +102,7 @@ describe('openapi document', () => {
       };
     };
     expect(
-      createReviewOperation.responses['200'].content['application/json']
-        .schema,
+      createReviewOperation.responses['200'].content['application/json'].schema,
     ).toEqual({ $ref: '#/components/schemas/PullRequestReview' });
     expect(
       doc.paths['/repos/{owner}/{repo}/pulls/{pullNumber}/comments'].post,
@@ -113,5 +112,50 @@ describe('openapi document', () => {
         '/repos/{owner}/{repo}/pulls/{pullNumber}/comments/{commentId}/replies'
       ].post,
     ).toBeTruthy();
+  });
+
+  it('documents exact stacked pull-request outcomes for generated tools', () => {
+    const doc = buildOpenApiDocument();
+    const schemas = doc.components.schemas;
+
+    expect(schemas.AsyncMergeResult.oneOf).toHaveLength(4);
+    expect(schemas.AsyncMergePending.required).toEqual([
+      'status',
+      'message',
+      'id',
+      'mergeMethod',
+      'mergeAction',
+      'expectedHeadSha',
+    ]);
+
+    const submitMerge = doc.paths[
+      '/repos/{owner}/{repo}/pulls/{pullNumber}/merge-async'
+    ].put as { responses: Record<string, unknown> };
+    expect(Object.keys(submitMerge.responses).sort()).toEqual([
+      '200',
+      '202',
+      '400',
+      '409',
+      'default',
+    ]);
+
+    const unstack = doc.paths[
+      '/repos/{owner}/{repo}/stacks/{stackNumber}/unstack'
+    ].post as { responses: Record<string, unknown> };
+    expect(Object.keys(unstack.responses).sort()).toEqual([
+      '200',
+      '204',
+      '409',
+      'default',
+    ]);
+    expect(unstack.responses['204']).not.toHaveProperty('content');
+
+    expect(
+      doc.paths['/repos/{owner}/{repo}/stacks/{stackNumber}/merge-async'].put,
+    ).toBeTruthy();
+    expect(schemas.PullRequestStackEntry.required).toContain('title');
+    expect(schemas.PullRequestStackSummaryEntry.required).not.toContain(
+      'title',
+    );
   });
 });

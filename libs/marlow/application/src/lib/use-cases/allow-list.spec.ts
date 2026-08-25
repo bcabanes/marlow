@@ -32,6 +32,7 @@ import {
   listPullRequests,
   listTree,
   mergePullRequestAsync,
+  mergePullRequestStack,
   removeAssignees,
   removeLabel,
   searchCode,
@@ -186,6 +187,10 @@ const invocations: ReadonlyArray<readonly [string, Invoke]> = [
   [
     'mergePullRequestAsync',
     () => mergePullRequestAsync(throwingPort)({ ...repo, pullNumber: 1 }),
+  ],
+  [
+    'mergePullRequestStack',
+    () => mergePullRequestStack(throwingPort)({ ...repo, stackNumber: 1 }),
   ],
   [
     'getPullRequestMergeResult',

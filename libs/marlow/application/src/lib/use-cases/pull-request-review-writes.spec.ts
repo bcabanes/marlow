@@ -143,8 +143,7 @@ describe('pull-request review write use cases', () => {
       state: 'PENDING',
       body: null,
       submittedAt: null,
-      htmlUrl:
-        'https://github.com/nrwl/nx/pull/42#pullrequestreview-901',
+      htmlUrl: 'https://github.com/nrwl/nx/pull/42#pullrequestreview-901',
     };
     const create = vi.fn().mockResolvedValue(review);
     const port = fakePort({ createPullRequestReview: create });

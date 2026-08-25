@@ -28,6 +28,8 @@ export const githubErrorToApiError = (error: GitHubPortError): ApiError => {
       return forbidden('GitHub denied access to the resource');
     case 'not_found':
       return notFound('GitHub resource not found');
+    case 'conflict':
+      return conflict('GitHub resource is being modified by another request');
     case 'rate_limited':
       return rateLimited('GitHub rate limit exceeded');
     case 'validation_failed':

@@ -7,6 +7,7 @@ export * from './lib/git-sha.js';
 export * from './lib/repo-path.js';
 export * from './lib/issue-number.js';
 export * from './lib/pull-request-number.js';
+export * from './lib/pull-request-stack-members.js';
 export * from './lib/pull-request-stack-number.js';
 export * from './lib/async-merge-id.js';
 export * from './lib/review-comment-id.js';

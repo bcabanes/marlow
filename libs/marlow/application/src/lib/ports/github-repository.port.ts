@@ -4,13 +4,16 @@ import {
   GitRef,
   GitSha,
   IssueNumber,
+  NewPullRequestStackMembers,
   PullRequestNumber,
+  PullRequestStackAdditions,
   PullRequestStackNumber,
   RepoRef,
   ReviewCommentId,
 } from '@org/marlow-domain';
 import {
   AsyncMergeResult,
+  AsyncMergeSubmission,
   AssigneeSet,
   CheckRun,
   CodeSearchResult,
@@ -34,18 +37,17 @@ import {
   PullRequestMergeAction,
   PullRequestMergeMethod,
   PullRequestStack,
+  PullRequestStackSummary,
   PullRequestSummary,
   ReviewComment,
   TreeResult,
+  UnstackPullRequestsResult,
 } from '../dtos.js';
 
 export type PullRequestReviewSide = 'LEFT' | 'RIGHT';
 /** Review intent; adapters translate PENDING by omitting GitHub's event field. */
 export type PullRequestReviewEvent =
-  | 'PENDING'
-  | 'COMMENT'
-  | 'APPROVE'
-  | 'REQUEST_CHANGES';
+  'PENDING' | 'COMMENT' | 'APPROVE' | 'REQUEST_CHANGES';
 
 export type PullRequestReviewCommentTarget =
   | {
@@ -249,7 +251,7 @@ export interface GitHubRepositoryPort {
       readonly repo: RepoRef;
       readonly pullNumber?: PullRequestNumber;
     } & Pagination,
-  ): Promise<readonly PullRequestStack[]>;
+  ): Promise<readonly PullRequestStackSummary[]>;
 
   getPullRequestStack(input: {
     readonly repo: RepoRef;
@@ -259,20 +261,20 @@ export interface GitHubRepositoryPort {
   createPullRequestStack(input: {
     readonly repo: RepoRef;
     /** Pull request numbers ordered from the bottom of the stack to the top. */
-    readonly pullNumbers: readonly PullRequestNumber[];
+    readonly pullNumbers: NewPullRequestStackMembers;
   }): Promise<PullRequestStack>;
 
   addPullRequestsToStack(input: {
     readonly repo: RepoRef;
     readonly stackNumber: PullRequestStackNumber;
     /** Pull request numbers to append, ordered from the current top upward. */
-    readonly pullNumbers: readonly PullRequestNumber[];
+    readonly pullNumbers: PullRequestStackAdditions;
   }): Promise<PullRequestStack>;
 
   unstackPullRequests(input: {
     readonly repo: RepoRef;
     readonly stackNumber: PullRequestStackNumber;
-  }): Promise<PullRequestStack | null>;
+  }): Promise<UnstackPullRequestsResult>;
 
   mergePullRequestAsync(input: {
     readonly repo: RepoRef;
@@ -282,7 +284,7 @@ export interface GitHubRepositoryPort {
     readonly commitTitle?: string;
     readonly commitMessage?: string;
     readonly expectedHeadSha?: GitSha;
-  }): Promise<AsyncMergeResult>;
+  }): Promise<AsyncMergeSubmission>;
 
   getPullRequestMergeResult(input: {
     readonly repo: RepoRef;

@@ -1,4 +1,9 @@
-import { GitHubPortError, GitHubRepositoryPort } from '@org/marlow-application';
+import {
+  AsyncMergeResult,
+  AsyncMergeSubmission,
+  GitHubPortError,
+  GitHubRepositoryPort,
+} from '@org/marlow-application';
 import type { Octokit } from 'octokit';
 import { RequestError } from 'octokit';
 import { mapGitHubError } from './github-error-mapper.js';
@@ -21,34 +26,51 @@ import {
   mapPullRequestFile,
   mapPullRequestReview,
   mapPullRequestStack,
+  mapPullRequestStackSummary,
   mapPullRequestSummary,
   mapReviewComment,
   mapTree,
 } from './github-dto-mapper.js';
+import {
+  parseAsyncMergeResult,
+  parsePullRequestStack,
+  parsePullRequestStackSummaries,
+} from './github-stack.schema.js';
 
 const STACKS_API_HEADERS = {
   'X-GitHub-Api-Version': '2026-03-10',
 } as const;
 
-type PullRequestStackPayload = Parameters<typeof mapPullRequestStack>[0];
-type AsyncMergePayload = Parameters<typeof mapAsyncMergeResult>[0];
+const asyncMergeSubmissionFor = (
+  status: number,
+  merge: AsyncMergeResult,
+): AsyncMergeSubmission => {
+  switch (status) {
+    case 202:
+      if (merge.status === 'pending') {
+        return { outcome: 'accepted', merge };
+      }
+      break;
+    case 200:
+      if (merge.status === 'merged' || merge.status === 'enqueued') {
+        return { outcome: 'completed', merge };
+      }
+      break;
+    case 400:
+      if (merge.status === 'failed') {
+        return { outcome: 'rejected', merge };
+      }
+      break;
+    case 409:
+      if (merge.status === 'pending') {
+        return { outcome: 'alreadyPending', merge };
+      }
+      break;
+  }
 
-const isAsyncMergePayload = (value: unknown): value is AsyncMergePayload => {
-  if (typeof value !== 'object' || value === null) return false;
-  const candidate = value as Record<string, unknown>;
-  if (
-    candidate.status !== 'pending' &&
-    candidate.status !== 'merged' &&
-    candidate.status !== 'enqueued' &&
-    candidate.status !== 'failed'
-  ) {
-    return false;
-  }
-  if (typeof candidate.details !== 'object' || candidate.details === null) {
-    return false;
-  }
-  return (
-    typeof (candidate.details as Record<string, unknown>).message === 'string'
+  throw new GitHubPortError(
+    'unavailable',
+    `GitHub returned asynchronous merge status ${merge.status} with HTTP ${status}`,
   );
 };
 
@@ -70,32 +92,39 @@ export const createGitHubRepositoryAdapter = (
     }
   };
 
-  const callAsyncMerge = async (
-    fn: () => Promise<{ readonly data: unknown }>,
-  ) => {
+  const callAsyncMergeSubmission = async (
+    fn: () => Promise<{ readonly data: unknown; readonly status: number }>,
+  ): Promise<AsyncMergeSubmission> => {
     try {
-      const { data } = await fn();
-      if (!isAsyncMergePayload(data)) {
-        throw new GitHubPortError(
-          'unprocessable',
-          'GitHub returned an invalid asynchronous merge result',
-        );
-      }
-      return mapAsyncMergeResult(data);
+      const { data, status } = await fn();
+      return asyncMergeSubmissionFor(
+        status,
+        mapAsyncMergeResult(parseAsyncMergeResult(data)),
+      );
     } catch (error) {
       // GitHub returns useful terminal/pollable results with 400 and 409.
       // Preserve those normalized results instead of turning them into errors.
       if (
         error instanceof RequestError &&
-        (error.status === 400 || error.status === 409) &&
-        isAsyncMergePayload(error.response?.data)
+        (error.status === 400 || error.status === 409)
       ) {
-        return mapAsyncMergeResult(error.response.data);
+        return asyncMergeSubmissionFor(
+          error.status,
+          mapAsyncMergeResult(parseAsyncMergeResult(error.response?.data)),
+        );
       }
       if (error instanceof GitHubPortError) throw error;
       throw mapGitHubError(error);
     }
   };
+
+  const callAsyncMergeResult = (
+    fn: () => Promise<{ readonly data: unknown }>,
+  ): Promise<AsyncMergeResult> =>
+    call(async () => {
+      const { data } = await fn();
+      return mapAsyncMergeResult(parseAsyncMergeResult(data));
+    });
 
   return {
     checkPermissions: (repo) =>
@@ -481,8 +510,8 @@ export const createGitHubRepositoryAdapter = (
             ...(perPage === undefined ? {} : { per_page: perPage }),
           },
         );
-        return (data as readonly PullRequestStackPayload[]).map(
-          mapPullRequestStack,
+        return parsePullRequestStackSummaries(data).map(
+          mapPullRequestStackSummary,
         );
       }),
 
@@ -497,7 +526,7 @@ export const createGitHubRepositoryAdapter = (
             headers: STACKS_API_HEADERS,
           },
         );
-        return mapPullRequestStack(data as PullRequestStackPayload);
+        return mapPullRequestStack(parsePullRequestStack(data));
       }),
 
     createPullRequestStack: ({ repo, pullNumbers }) =>
@@ -511,7 +540,7 @@ export const createGitHubRepositoryAdapter = (
             headers: STACKS_API_HEADERS,
           },
         );
-        return mapPullRequestStack(data as PullRequestStackPayload);
+        return mapPullRequestStack(parsePullRequestStack(data));
       }),
 
     addPullRequestsToStack: ({ repo, stackNumber, pullNumbers }) =>
@@ -526,7 +555,7 @@ export const createGitHubRepositoryAdapter = (
             headers: STACKS_API_HEADERS,
           },
         );
-        return mapPullRequestStack(data as PullRequestStackPayload);
+        return mapPullRequestStack(parsePullRequestStack(data));
       }),
 
     unstackPullRequests: ({ repo, stackNumber }) =>
@@ -541,8 +570,11 @@ export const createGitHubRepositoryAdapter = (
           },
         );
         return data === undefined || data === null || data === ''
-          ? null
-          : mapPullRequestStack(data as PullRequestStackPayload);
+          ? { outcome: 'dissolved' as const }
+          : {
+              outcome: 'updated' as const,
+              stack: mapPullRequestStack(parsePullRequestStack(data)),
+            };
       }),
 
     mergePullRequestAsync: ({
@@ -554,7 +586,7 @@ export const createGitHubRepositoryAdapter = (
       commitMessage,
       expectedHeadSha,
     }) =>
-      callAsyncMerge(() =>
+      callAsyncMergeSubmission(() =>
         octokit.request(
           'PUT /repos/{owner}/{repo}/pulls/{pull_number}/merge-async',
           {
@@ -574,7 +606,7 @@ export const createGitHubRepositoryAdapter = (
       ),
 
     getPullRequestMergeResult: ({ repo, pullNumber, mergeId }) =>
-      callAsyncMerge(() =>
+      callAsyncMergeResult(() =>
         octokit.request(
           'GET /repos/{owner}/{repo}/pulls/{pull_number}/merge-async/{uuid}',
           {

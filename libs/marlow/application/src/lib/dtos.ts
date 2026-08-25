@@ -278,18 +278,18 @@ export interface PullRequestFile {
   readonly changes: number;
 }
 
-/** A compact pull request entry within a stack, ordered bottom to top. */
-export interface PullRequestStackEntry {
+/** A compact pull request entry returned by GitHub's stack collection. */
+export interface PullRequestStackSummaryEntry {
   readonly number: number;
-  readonly state: string;
+  readonly state: 'open' | 'closed';
   readonly draft: boolean;
   readonly mergedAt: string | null;
   readonly headRef: string;
   readonly headSha: string;
 }
 
-/** A repository-scoped GitHub pull-request stack. */
-export interface PullRequestStack {
+/** A compact stack returned while listing repository stacks. */
+export interface PullRequestStackSummary {
   readonly id: number;
   readonly number: number;
   readonly nodeId: string;
@@ -298,23 +298,97 @@ export interface PullRequestStack {
   readonly open: boolean;
   readonly createdAt: string;
   /** Pull requests ordered from the stack's base toward its top. */
+  readonly pullRequests: readonly PullRequestStackSummaryEntry[];
+}
+
+/** A pull request in a stack detail or mutation response. */
+export interface PullRequestStackEntry extends PullRequestStackSummaryEntry {
+  readonly id: number;
+  readonly nodeId: string;
+  readonly title: string;
+  readonly htmlUrl: string;
+  readonly author: string | null;
+  readonly url: string;
+  readonly baseRef: string;
+  readonly baseSha: string;
+}
+
+/** A full repository-scoped stack returned by detail and write operations. */
+export interface PullRequestStack extends Omit<
+  PullRequestStackSummary,
+  'pullRequests'
+> {
   readonly pullRequests: readonly PullRequestStackEntry[];
 }
 
 export type PullRequestMergeMethod = 'merge' | 'squash' | 'rebase';
 export type PullRequestMergeAction = 'default' | 'direct_merge' | 'merge_queue';
-export type AsyncMergeStatus = 'pending' | 'merged' | 'enqueued' | 'failed';
+
+export interface AsyncMergePending {
+  readonly status: 'pending';
+  readonly message: string;
+  readonly id: string;
+  readonly mergeMethod: PullRequestMergeMethod;
+  readonly mergeAction: PullRequestMergeAction;
+  readonly expectedHeadSha: string;
+}
+
+export interface AsyncMergeMerged {
+  readonly status: 'merged';
+  readonly message: string;
+  readonly mergeCommitSha: string;
+}
+
+export interface AsyncMergeEnqueued {
+  readonly status: 'enqueued';
+  readonly message: string;
+}
+
+export interface AsyncMergeFailed {
+  readonly status: 'failed';
+  readonly message: string;
+}
 
 /** Provider-independent view of GitHub's asynchronous merge state. */
-export interface AsyncMergeResult {
-  readonly status: AsyncMergeStatus;
-  readonly message: string;
-  readonly id?: string;
-  readonly mergeMethod?: PullRequestMergeMethod;
-  readonly mergeAction?: PullRequestMergeAction;
-  readonly expectedHeadSha?: string;
-  readonly mergeCommitSha?: string;
-}
+export type AsyncMergeResult =
+  AsyncMergePending | AsyncMergeMerged | AsyncMergeEnqueued | AsyncMergeFailed;
+
+/** Semantic outcome of submitting an asynchronous merge request. */
+export type AsyncMergeSubmission =
+  | { readonly outcome: 'accepted'; readonly merge: AsyncMergePending }
+  | {
+      readonly outcome: 'completed';
+      readonly merge: AsyncMergeMerged | AsyncMergeEnqueued;
+    }
+  | { readonly outcome: 'rejected'; readonly merge: AsyncMergeFailed }
+  | { readonly outcome: 'alreadyPending'; readonly merge: AsyncMergePending };
+
+export type UnstackPullRequestsResult =
+  | { readonly outcome: 'dissolved' }
+  | { readonly outcome: 'updated'; readonly stack: PullRequestStack };
+
+export type PullRequestStackMergeResult =
+  | {
+      readonly outcome: 'complete';
+      readonly stackNumber: number;
+      readonly skippedMergedPullRequestNumbers: readonly number[];
+    }
+  | {
+      readonly outcome: 'blocked';
+      readonly stackNumber: number;
+      readonly skippedMergedPullRequestNumbers: readonly number[];
+      readonly blocker: {
+        readonly pullRequestNumber: number;
+        readonly reason: 'draft' | 'closed';
+      };
+    }
+  | {
+      readonly outcome: 'submitted';
+      readonly stackNumber: number;
+      readonly targetPullRequestNumber: number;
+      readonly skippedMergedPullRequestNumbers: readonly number[];
+      readonly submission: AsyncMergeSubmission;
+    };
 
 export interface StatusEntry {
   readonly context: string;

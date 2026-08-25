@@ -9,6 +9,7 @@ export type GitHubErrorKind =
   | 'unauthorized'
   | 'forbidden'
   | 'not_found'
+  | 'conflict'
   | 'rate_limited'
   | 'validation_failed'
   | 'pending_review_exists'

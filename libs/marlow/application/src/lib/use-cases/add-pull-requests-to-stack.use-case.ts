@@ -1,13 +1,13 @@
 import {
   DomainError,
   Result,
+  createPullRequestStackAdditions,
   createPullRequestStackNumber,
   ok,
 } from '@org/marlow-domain';
 import { PullRequestStack } from '../dtos.js';
 import { GitHubRepositoryPort } from '../ports/github-repository.port.js';
 import { resolveAllowedRepo } from '../resolve-allowed-repo.js';
-import { validatePullRequestNumbers } from './pull-request-stack-validation.js';
 
 export interface AddPullRequestsToStackInput {
   readonly owner: string;
@@ -25,7 +25,7 @@ export const addPullRequestsToStack =
     if (!repo.ok) return repo;
     const stackNumber = createPullRequestStackNumber(input.stackNumber);
     if (!stackNumber.ok) return stackNumber;
-    const pullNumbers = validatePullRequestNumbers(input.pullNumbers);
+    const pullNumbers = createPullRequestStackAdditions(input.pullNumbers);
     if (!pullNumbers.ok) return pullNumbers;
     return ok(
       await github.addPullRequestsToStack({

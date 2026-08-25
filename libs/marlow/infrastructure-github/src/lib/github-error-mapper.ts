@@ -9,6 +9,8 @@ const kindForStatus = (status: number): GitHubErrorKind => {
       return 'forbidden';
     case 404:
       return 'not_found';
+    case 409:
+      return 'conflict';
     case 422:
       return 'validation_failed';
     case 429:

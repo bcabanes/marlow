@@ -138,6 +138,10 @@ export type MergePullRequestAsyncBody = z.infer<
   typeof mergePullRequestAsyncBodySchema
 >;
 
+/** Body for merging an entire remote stack using GitHub's async merge. */
+export const mergePullRequestStackBodySchema = mergePullRequestAsyncBodySchema;
+export type MergePullRequestStackBody = MergePullRequestAsyncBody;
+
 export const reviewSideSchema = z.enum(['LEFT', 'RIGHT']);
 
 const reviewCommentCommonShape = {

@@ -8,6 +8,8 @@ import {
   createGitSha,
   createIssueNumber,
   createPullRequestNumber,
+  createNewPullRequestStackMembers,
+  createPullRequestStackAdditions,
   createPullRequestStackNumber,
   createReviewCommentId,
   createRepoRef,
@@ -119,5 +121,23 @@ describe('asynchronous merge IDs', () => {
       true,
     );
     expect(createAsyncMergeId('not-a-uuid').ok).toBe(false);
+  });
+});
+
+describe('pull request stack members', () => {
+  it('accepts unique ordered members with operation-specific cardinality', () => {
+    expect(createNewPullRequestStackMembers([101, 102]).ok).toBe(true);
+    expect(createPullRequestStackAdditions([103]).ok).toBe(true);
+  });
+
+  it('rejects duplicate, missing, and oversized member sets', () => {
+    expect(createNewPullRequestStackMembers([101]).ok).toBe(false);
+    expect(createNewPullRequestStackMembers([101, 101]).ok).toBe(false);
+    expect(createPullRequestStackAdditions([]).ok).toBe(false);
+    expect(
+      createPullRequestStackAdditions(
+        Array.from({ length: 101 }, (_, index) => index + 1),
+      ).ok,
+    ).toBe(false);
   });
 });

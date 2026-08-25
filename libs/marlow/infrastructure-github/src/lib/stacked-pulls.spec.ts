@@ -4,7 +4,13 @@ import type {
   PullRequestNumber,
   PullRequestStackNumber,
 } from '@org/marlow-domain';
+import { GitHubPortError } from '@org/marlow-application';
+import {
+  createNewPullRequestStackMembers,
+  createPullRequestStackAdditions,
+} from '@org/marlow-domain';
 import type { Octokit } from 'octokit';
+import { RequestError } from 'octokit';
 import { describe, expect, it, vi } from 'vitest';
 import { createGitHubRepositoryAdapter } from './github-repository.adapter.js';
 
@@ -36,6 +42,39 @@ const stackPayload = {
     },
   ],
 };
+
+const stackDetailPayload = {
+  ...stackPayload,
+  pull_requests: stackPayload.pull_requests.map((pull, index) => ({
+    ...pull,
+    id: 100001 + index,
+    node_id: `PR_node_${index}`,
+    title: index === 0 ? 'Add user model' : 'Add user API',
+    html_url: `https://github.com/nrwl/nx/pull/${pull.number}`,
+    user: { login: 'octocat' },
+    url: `https://api.github.com/repos/nrwl/nx/pulls/${pull.number}`,
+    base: {
+      ref: index === 0 ? 'main' : 'user-model',
+      sha: index === 0 ? 'c'.repeat(40) : 'a'.repeat(40),
+    },
+  })),
+};
+
+const unwrap = <T>(result: { readonly ok: boolean; readonly value?: T }): T => {
+  if (!result.ok) throw new Error('expected valid fixture');
+  return result.value as T;
+};
+
+const requestError = (status: number, data: unknown): RequestError =>
+  new RequestError(`status ${status}`, status, {
+    request: { method: 'PUT', url: 'https://api.github.com/x', headers: {} },
+    response: {
+      status,
+      url: 'https://api.github.com/x',
+      headers: {},
+      data,
+    },
+  });
 
 describe('stacked pull requests', () => {
   it('maps stack membership on ordinary pull-request responses', async () => {
@@ -136,11 +175,49 @@ describe('stacked pull requests', () => {
     });
   });
 
+  it('preserves the richer stack detail shape', async () => {
+    const request = vi.fn().mockResolvedValue({ data: stackDetailPayload });
+    const adapter = createGitHubRepositoryAdapter({
+      request,
+    } as unknown as Octokit);
+
+    const detail = await adapter.getPullRequestStack({
+      repo,
+      stackNumber: 42 as PullRequestStackNumber,
+    });
+
+    expect(detail.pullRequests[1]).toEqual(
+      expect.objectContaining({
+        id: 100002,
+        title: 'Add user API',
+        htmlUrl: 'https://github.com/nrwl/nx/pull/102',
+        author: 'octocat',
+        baseRef: 'user-model',
+        baseSha: 'a'.repeat(40),
+      }),
+    );
+  });
+
+  it('rejects malformed preview payloads at the adapter boundary', async () => {
+    const request = vi.fn().mockResolvedValue({
+      data: [{ ...stackPayload, pull_requests: [{ number: 101 }] }],
+    });
+    const adapter = createGitHubRepositoryAdapter({
+      request,
+    } as unknown as Octokit);
+
+    await expect(adapter.listPullRequestStacks({ repo })).rejects.toMatchObject(
+      {
+        kind: 'unavailable',
+      } satisfies Partial<GitHubPortError>,
+    );
+  });
+
   it('creates, extends, and dissolves stacks with ordered PR numbers', async () => {
     const request = vi
       .fn()
-      .mockResolvedValueOnce({ data: stackPayload })
-      .mockResolvedValueOnce({ data: stackPayload })
+      .mockResolvedValueOnce({ data: stackDetailPayload })
+      .mockResolvedValueOnce({ data: stackDetailPayload })
       .mockResolvedValueOnce({ data: undefined });
     const adapter = createGitHubRepositoryAdapter({
       request,
@@ -148,12 +225,12 @@ describe('stacked pull requests', () => {
 
     await adapter.createPullRequestStack({
       repo,
-      pullNumbers: [101, 102] as PullRequestNumber[],
+      pullNumbers: unwrap(createNewPullRequestStackMembers([101, 102])),
     });
     await adapter.addPullRequestsToStack({
       repo,
       stackNumber: 42 as PullRequestStackNumber,
-      pullNumbers: [103] as PullRequestNumber[],
+      pullNumbers: unwrap(createPullRequestStackAdditions([103])),
     });
     const dissolved = await adapter.unstackPullRequests({
       repo,
@@ -190,7 +267,29 @@ describe('stacked pull requests', () => {
         },
       ],
     ]);
-    expect(dissolved).toBeNull();
+    expect(dissolved).toEqual({ outcome: 'dissolved' });
+  });
+
+  it('returns the remaining detail when GitHub only partially unstacks', async () => {
+    const request = vi.fn().mockResolvedValue({ data: stackDetailPayload });
+    const adapter = createGitHubRepositoryAdapter({
+      request,
+    } as unknown as Octokit);
+
+    const result = await adapter.unstackPullRequests({
+      repo,
+      stackNumber: 42 as PullRequestStackNumber,
+    });
+
+    expect(result).toEqual({
+      outcome: 'updated',
+      stack: expect.objectContaining({
+        number: 42,
+        pullRequests: expect.arrayContaining([
+          expect.objectContaining({ title: 'Add user model' }),
+        ]),
+      }),
+    });
   });
 
   it('submits and polls the asynchronous merge required for stacked PRs', async () => {
@@ -213,7 +312,7 @@ describe('stacked pull requests', () => {
     };
     const request = vi
       .fn()
-      .mockResolvedValueOnce({ data: pending })
+      .mockResolvedValueOnce({ data: pending, status: 202 })
       .mockResolvedValueOnce({ data: merged });
     const adapter = createGitHubRepositoryAdapter({
       request,
@@ -233,12 +332,15 @@ describe('stacked pull requests', () => {
     });
 
     expect(submitted).toEqual({
-      status: 'pending',
-      message: 'Merge request enqueued.',
-      id: pending.details.uuid,
-      mergeMethod: 'squash',
-      mergeAction: 'default',
-      expectedHeadSha: 'b'.repeat(40),
+      outcome: 'accepted',
+      merge: {
+        status: 'pending',
+        message: 'Merge request enqueued.',
+        id: pending.details.uuid,
+        mergeMethod: 'squash',
+        mergeAction: 'default',
+        expectedHeadSha: 'b'.repeat(40),
+      },
     });
     expect(result).toEqual({
       status: 'merged',
@@ -257,5 +359,75 @@ describe('stacked pull requests', () => {
         sha: 'b'.repeat(40),
       },
     ]);
+  });
+
+  it.each([
+    [
+      200,
+      {
+        status: 'enqueued',
+        details: { message: 'Added to merge queue.' },
+      },
+      'completed',
+    ],
+    [
+      400,
+      {
+        status: 'failed',
+        details: { message: 'Pull request is a draft.' },
+      },
+      'rejected',
+    ],
+    [
+      409,
+      {
+        status: 'pending',
+        details: {
+          message: 'Merge already pending.',
+          uuid: '630b9d5e-3f2a-4f7e-8b0c-2d5f9a8c1e42',
+          merge_method: 'squash',
+          merge_action: 'default',
+          expected_head_sha: 'b'.repeat(40),
+        },
+      },
+      'alreadyPending',
+    ],
+  ] as const)(
+    'maps GitHub async merge HTTP %i to %s',
+    async (status, data, outcome) => {
+      const request = vi.fn();
+      if (status === 200) {
+        request.mockResolvedValue({ status, data });
+      } else {
+        request.mockRejectedValue(requestError(status, data));
+      }
+      const adapter = createGitHubRepositoryAdapter({
+        request,
+      } as unknown as Octokit);
+
+      const result = await adapter.mergePullRequestAsync({
+        repo,
+        pullNumber: 102 as PullRequestNumber,
+      });
+
+      expect(result.outcome).toBe(outcome);
+    },
+  );
+
+  it('rejects pending merge payloads without poll state', async () => {
+    const request = vi.fn().mockResolvedValue({
+      status: 202,
+      data: { status: 'pending', details: { message: 'Pending.' } },
+    });
+    const adapter = createGitHubRepositoryAdapter({
+      request,
+    } as unknown as Octokit);
+
+    await expect(
+      adapter.mergePullRequestAsync({
+        repo,
+        pullNumber: 102 as PullRequestNumber,
+      }),
+    ).rejects.toMatchObject({ kind: 'unavailable' });
   });
 });

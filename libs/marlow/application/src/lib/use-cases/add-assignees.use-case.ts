@@ -12,7 +12,9 @@ export interface AddAssigneesInput {
 
 export const addAssignees =
   (github: GitHubRepositoryPort) =>
-  async (input: AddAssigneesInput): Promise<Result<AssigneeSet, DomainError>> => {
+  async (
+    input: AddAssigneesInput,
+  ): Promise<Result<AssigneeSet, DomainError>> => {
     const repo = resolveAllowedRepo(input.owner, input.repo);
     if (!repo.ok) return repo;
     const issueNumber = createIssueNumber(input.issueNumber);

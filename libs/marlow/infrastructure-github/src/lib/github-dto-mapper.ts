@@ -22,11 +22,17 @@ import {
   PullRequestReview,
   PullRequestStack,
   PullRequestStackMembership,
+  PullRequestStackSummary,
   PullRequestSummary,
   ReviewComment,
   TreeEntryType,
   TreeResult,
 } from '@org/marlow-application';
+import type {
+  GitHubAsyncMergeResult,
+  GitHubPullRequestStack,
+  GitHubPullRequestStackSummary,
+} from './github-stack.schema.js';
 
 // Single-source payloads are derived directly from Octokit so they stay in
 // lock-step with the client. Shapes returned by several endpoints (commits,
@@ -124,35 +130,6 @@ interface GhPullStackMembershipLike {
   readonly size: number;
   readonly position: number;
   readonly base: { readonly ref: string; readonly sha: string };
-}
-
-interface GhPullRequestStackLike {
-  readonly id: number;
-  readonly number: number;
-  readonly node_id: string;
-  readonly url: string;
-  readonly base: { readonly ref: string };
-  readonly open: boolean;
-  readonly created_at: string;
-  readonly pull_requests: ReadonlyArray<{
-    readonly number: number;
-    readonly state: string;
-    readonly draft: boolean;
-    readonly merged_at: string | null;
-    readonly head: { readonly ref: string; readonly sha: string };
-  }>;
-}
-
-interface GhAsyncMergeResultLike {
-  readonly status: 'pending' | 'merged' | 'enqueued' | 'failed';
-  readonly details: {
-    readonly message: string;
-    readonly uuid?: string;
-    readonly merge_method?: 'merge' | 'squash' | 'rebase';
-    readonly merge_action?: 'default' | 'direct_merge' | 'merge_queue';
-    readonly expected_head_sha?: string;
-    readonly sha?: string;
-  };
 }
 
 interface GhReviewLike {
@@ -417,9 +394,7 @@ export const mapPullRequestFile = (data: PullFileItem): PullRequestFile => ({
   changes: data.changes,
 });
 
-export const mapPullRequestStack = (
-  data: GhPullRequestStackLike,
-): PullRequestStack => ({
+const mapPullRequestStackBase = (data: GitHubPullRequestStackSummary) => ({
   id: data.id,
   number: data.number,
   nodeId: data.node_id,
@@ -427,6 +402,12 @@ export const mapPullRequestStack = (
   baseRef: data.base.ref,
   open: data.open,
   createdAt: data.created_at,
+});
+
+export const mapPullRequestStackSummary = (
+  data: GitHubPullRequestStackSummary,
+): PullRequestStackSummary => ({
+  ...mapPullRequestStackBase(data),
   pullRequests: data.pull_requests.map((pull) => ({
     number: pull.number,
     state: pull.state,
@@ -437,25 +418,53 @@ export const mapPullRequestStack = (
   })),
 });
 
-export const mapAsyncMergeResult = (
-  data: GhAsyncMergeResultLike,
-): AsyncMergeResult => ({
-  status: data.status,
-  message: data.details.message,
-  ...(data.details.uuid === undefined ? {} : { id: data.details.uuid }),
-  ...(data.details.merge_method === undefined
-    ? {}
-    : { mergeMethod: data.details.merge_method }),
-  ...(data.details.merge_action === undefined
-    ? {}
-    : { mergeAction: data.details.merge_action }),
-  ...(data.details.expected_head_sha === undefined
-    ? {}
-    : { expectedHeadSha: data.details.expected_head_sha }),
-  ...(data.details.sha === undefined
-    ? {}
-    : { mergeCommitSha: data.details.sha }),
+export const mapPullRequestStack = (
+  data: GitHubPullRequestStack,
+): PullRequestStack => ({
+  ...mapPullRequestStackBase(data),
+  pullRequests: data.pull_requests.map((pull) => ({
+    id: pull.id,
+    nodeId: pull.node_id,
+    title: pull.title,
+    htmlUrl: pull.html_url,
+    author: pull.user?.login ?? null,
+    number: pull.number,
+    url: pull.url,
+    state: pull.state,
+    draft: pull.draft,
+    mergedAt: pull.merged_at,
+    headRef: pull.head.ref,
+    headSha: pull.head.sha,
+    baseRef: pull.base.ref,
+    baseSha: pull.base.sha,
+  })),
 });
+
+export const mapAsyncMergeResult = (
+  data: GitHubAsyncMergeResult,
+): AsyncMergeResult => {
+  switch (data.status) {
+    case 'pending':
+      return {
+        status: 'pending',
+        message: data.details.message,
+        id: data.details.uuid,
+        mergeMethod: data.details.merge_method,
+        mergeAction: data.details.merge_action,
+        expectedHeadSha: data.details.expected_head_sha,
+      };
+    case 'merged':
+      return {
+        status: 'merged',
+        message: data.details.message,
+        mergeCommitSha: data.details.sha,
+      };
+    case 'enqueued':
+      return { status: 'enqueued', message: data.details.message };
+    case 'failed':
+      return { status: 'failed', message: data.details.message };
+  }
+};
 
 export const mapCombinedStatus = (
   data: CombinedStatusData,

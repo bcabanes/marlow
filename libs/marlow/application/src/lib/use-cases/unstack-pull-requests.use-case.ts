@@ -4,7 +4,7 @@ import {
   createPullRequestStackNumber,
   ok,
 } from '@org/marlow-domain';
-import { PullRequestStack } from '../dtos.js';
+import { UnstackPullRequestsResult } from '../dtos.js';
 import { GitHubRepositoryPort } from '../ports/github-repository.port.js';
 import { resolveAllowedRepo } from '../resolve-allowed-repo.js';
 
@@ -18,7 +18,7 @@ export const unstackPullRequests =
   (github: GitHubRepositoryPort) =>
   async (
     input: UnstackPullRequestsInput,
-  ): Promise<Result<PullRequestStack | null, DomainError>> => {
+  ): Promise<Result<UnstackPullRequestsResult, DomainError>> => {
     const repo = resolveAllowedRepo(input.owner, input.repo);
     if (!repo.ok) return repo;
     const stackNumber = createPullRequestStackNumber(input.stackNumber);

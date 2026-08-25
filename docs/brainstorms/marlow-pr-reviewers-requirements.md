@@ -16,12 +16,12 @@ The ask was: allow reads of any public repo, keep the allow-list only for writes
 
 **Decision: not built.** Reads stay allow-list-gated, exactly as today.
 
-**Why.** Marlow's entire value is the *privileged* path — allow-list-gated,
+**Why.** Marlow's entire value is the _privileged_ path — allow-list-gated,
 token-backed access to a closed set of repos the agent otherwise cannot touch
 (`libs/marlow/domain/src/lib/allowed-repos.ts`; the token is fetched lazily, only
 after a repo passes the gate — `apps/marlow-api/src/app/dependencies.ts`,
 `lazy-github-port.ts`). Public-repo data is reachable by anyone with an anonymous
-`GET api.github.com/...`. A safe implementation (an *unauthenticated* proxy for
+`GET api.github.com/...`. A safe implementation (an _unauthenticated_ proxy for
 non-allow-listed reads, so the token never leaves the allow-list cage) would add
 only two things over a plain fetch: Marlow's trimmed DTO shape, and working inside
 a no-outbound-network sandbox. Neither justifies splitting the gate into
@@ -34,24 +34,27 @@ calculus flips. Not the case today.
 
 ## Request 2 — reviewers (and assignees) on PRs
 
-Guidance: *follow REST best practice and how GitHub itself exposes things.*
+Guidance: _follow REST best practice and how GitHub itself exposes things._
 
 ### Assignees — already shipped
+
 `PullRequestSummary.assignees` and `PullRequest.assignees` already exist
 (`libs/marlow/application/src/lib/dtos.ts`). No change.
 
 ### Requested reviewers — fields on the PR resource
+
 GitHub carries `requested_reviewers` (users) and `requested_teams` (teams) **on the
 PR object**, in both list and detail responses. Mirror that:
 
 - Add `requestedReviewers` (user logins) and `requestedTeams` (team slugs) to
   `PullRequestSummary` (inherited by `PullRequest`).
 - Keep users and teams as separate arrays, exactly as GitHub does.
-- Placement on the *summary* is consistent with `assignees` (already there) — both
+- Placement on the _summary_ is consistent with `assignees` (already there) — both
   are small bounded login arrays, so this does not violate the token-lean summary
   rule that stripped large free-text bodies.
 
 ### Reviews (verdicts) — a sub-collection endpoint
+
 The actual review verdicts are a sub-resource in GitHub
 (`GET /pulls/{n}/reviews`). Mirror that with a new endpoint:
 
@@ -65,10 +68,11 @@ The actual review verdicts are a sub-resource in GitHub
 - Read-only; allow-list-gated like every other read.
 
 ### Code owners — note only, nothing built
+
 GitHub's REST API exposes **no per-PR / per-path code-owner resolution**. The only
 REST surface is `GET /repos/{owner}/{repo}/codeowners/errors` (syntax validation).
-Owner resolution happens inside GitHub and surfaces only as *auto-requested
-reviewers*. So, faithful to "how GitHub exposes things":
+Owner resolution happens inside GitHub and surfaces only as _auto-requested
+reviewers_. So, faithful to "how GitHub exposes things":
 
 - Owners GitHub auto-requested already appear in the new
   `requestedReviewers` / `requestedTeams`.
@@ -77,12 +81,14 @@ reviewers*. So, faithful to "how GitHub exposes things":
 - No bespoke endpoint or glob-matching resolver is added.
 
 ## Non-goals
+
 - Unauthenticated / permissive public reads (Request 1, dropped).
 - A `CODEOWNERS` parse endpoint or PR-to-owners resolver.
 - A single-review fetch endpoint (`/reviews/{id}`).
 - Exposing `requested_teams` as anything richer than slugs.
 
 ## Success criteria
+
 - `GET /pulls/{n}` and `GET /pulls` return `requestedReviewers` and
   `requestedTeams`; existing `assignees` unchanged.
 - `GET /pulls/{n}/reviews` returns reviewer + state + note + timestamp, gated by
@@ -92,6 +98,7 @@ reviewers*. So, faithful to "how GitHub exposes things":
 - All 7 projects pass typecheck / test / lint.
 
 ## Implementation-time decisions (for execution, not product)
+
 - Reuse `paginationQuerySchema` + `pullNumberParamsSchema`; no new contract.
 - Mapper stays structural (`GhReviewLike`) like the other mappers, robust to
   Octokit's per-endpoint types.

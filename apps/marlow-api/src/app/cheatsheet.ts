@@ -51,7 +51,7 @@ export const buildCheatSheet = (): string => {
   let currentTag: string | null = null;
   for (const endpoint of endpoints) {
     if (endpoint.tag !== currentTag) {
-      lines.push('', `## ${endpoint.tag}`);
+      lines.push('', `## ${endpoint.tag}`, '');
       currentTag = endpoint.tag;
     }
     lines.push(formatLine(endpoint));

@@ -44,5 +44,7 @@ export * from './lib/use-cases/add-pull-requests-to-stack.use-case.js';
 export * from './lib/use-cases/unstack-pull-requests.use-case.js';
 export * from './lib/use-cases/merge-pull-request-async.use-case.js';
 export * from './lib/use-cases/get-pull-request-merge-result.use-case.js';
+export * from './lib/use-cases/merge-pull-request-stack.use-case.js';
+export * from './lib/use-cases/pull-request-stack-merge-selection.js';
 export * from './lib/use-cases/get-combined-status.use-case.js';
 export * from './lib/use-cases/list-check-runs.use-case.js';

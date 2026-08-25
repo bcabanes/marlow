@@ -6,7 +6,7 @@ import {
   ok,
 } from '@org/marlow-domain';
 import {
-  AsyncMergeResult,
+  AsyncMergeSubmission,
   PullRequestMergeAction,
   PullRequestMergeMethod,
 } from '../dtos.js';
@@ -28,7 +28,7 @@ export const mergePullRequestAsync =
   (github: GitHubRepositoryPort) =>
   async (
     input: MergePullRequestAsyncInput,
-  ): Promise<Result<AsyncMergeResult, DomainError>> => {
+  ): Promise<Result<AsyncMergeSubmission, DomainError>> => {
     const repo = resolveAllowedRepo(input.owner, input.repo);
     if (!repo.ok) return repo;
     const pullNumber = createPullRequestNumber(input.pullNumber);

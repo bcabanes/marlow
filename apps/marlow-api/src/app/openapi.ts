@@ -306,7 +306,7 @@ export const bodySchemas = {
         type: 'string',
         enum: ['PENDING', 'COMMENT', 'APPROVE', 'REQUEST_CHANGES'],
         description:
-          'Optional. Omit this or use PENDING for an unsubmitted review. Marlow omits GitHub\'s event field in either case; every submitted-review value is forwarded unchanged.',
+          "Optional. Omit this or use PENDING for an unsubmitted review. Marlow omits GitHub's event field in either case; every submitted-review value is forwarded unchanged.",
       },
       commitId: nonEmptyString,
       body: { type: 'string', maxLength: 65536 },
@@ -399,6 +399,364 @@ export const bodySchemas = {
 } satisfies Record<string, BodySchema>;
 
 const responseSchemas = {
+  PullRequestStackSummaryEntry: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['number', 'state', 'draft', 'mergedAt', 'headRef', 'headSha'],
+    properties: {
+      number: positiveInt,
+      state: { type: 'string', enum: ['open', 'closed'] },
+      draft: { type: 'boolean' },
+      mergedAt: { type: ['string', 'null'], format: 'date-time' },
+      headRef: { type: 'string' },
+      headSha: nonEmptyString,
+    },
+  },
+  PullRequestStackSummary: {
+    type: 'object',
+    additionalProperties: false,
+    required: [
+      'id',
+      'number',
+      'nodeId',
+      'url',
+      'baseRef',
+      'open',
+      'createdAt',
+      'pullRequests',
+    ],
+    properties: {
+      id: positiveInt,
+      number: positiveInt,
+      nodeId: { type: 'string' },
+      url: { type: 'string', format: 'uri' },
+      baseRef: { type: 'string' },
+      open: { type: 'boolean' },
+      createdAt: { type: 'string', format: 'date-time' },
+      pullRequests: {
+        type: 'array',
+        items: { $ref: '#/components/schemas/PullRequestStackSummaryEntry' },
+      },
+    },
+  },
+  PullRequestStackSummaryList: {
+    type: 'array',
+    items: { $ref: '#/components/schemas/PullRequestStackSummary' },
+  },
+  PullRequestStackEntry: {
+    type: 'object',
+    additionalProperties: false,
+    required: [
+      'id',
+      'nodeId',
+      'title',
+      'htmlUrl',
+      'author',
+      'number',
+      'url',
+      'state',
+      'draft',
+      'mergedAt',
+      'headRef',
+      'headSha',
+      'baseRef',
+      'baseSha',
+    ],
+    properties: {
+      id: positiveInt,
+      nodeId: { type: 'string' },
+      title: { type: 'string' },
+      htmlUrl: { type: 'string', format: 'uri' },
+      author: { type: ['string', 'null'] },
+      number: positiveInt,
+      url: { type: 'string', format: 'uri' },
+      state: { type: 'string', enum: ['open', 'closed'] },
+      draft: { type: 'boolean' },
+      mergedAt: { type: ['string', 'null'], format: 'date-time' },
+      headRef: { type: 'string' },
+      headSha: nonEmptyString,
+      baseRef: { type: 'string' },
+      baseSha: nonEmptyString,
+    },
+  },
+  PullRequestStack: {
+    type: 'object',
+    additionalProperties: false,
+    required: [
+      'id',
+      'number',
+      'nodeId',
+      'url',
+      'baseRef',
+      'open',
+      'createdAt',
+      'pullRequests',
+    ],
+    properties: {
+      id: positiveInt,
+      number: positiveInt,
+      nodeId: { type: 'string' },
+      url: { type: 'string', format: 'uri' },
+      baseRef: { type: 'string' },
+      open: { type: 'boolean' },
+      createdAt: { type: 'string', format: 'date-time' },
+      pullRequests: {
+        type: 'array',
+        items: { $ref: '#/components/schemas/PullRequestStackEntry' },
+      },
+    },
+  },
+  AsyncMergePending: {
+    type: 'object',
+    additionalProperties: false,
+    required: [
+      'status',
+      'message',
+      'id',
+      'mergeMethod',
+      'mergeAction',
+      'expectedHeadSha',
+    ],
+    properties: {
+      status: { const: 'pending' },
+      message: { type: 'string' },
+      id: { type: 'string', format: 'uuid' },
+      mergeMethod: { type: 'string', enum: ['merge', 'squash', 'rebase'] },
+      mergeAction: {
+        type: 'string',
+        enum: ['default', 'direct_merge', 'merge_queue'],
+      },
+      expectedHeadSha: nonEmptyString,
+    },
+  },
+  AsyncMergeMerged: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['status', 'message', 'mergeCommitSha'],
+    properties: {
+      status: { const: 'merged' },
+      message: { type: 'string' },
+      mergeCommitSha: nonEmptyString,
+    },
+  },
+  AsyncMergeEnqueued: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['status', 'message'],
+    properties: {
+      status: { const: 'enqueued' },
+      message: { type: 'string' },
+    },
+  },
+  AsyncMergeFailed: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['status', 'message'],
+    properties: {
+      status: { const: 'failed' },
+      message: { type: 'string' },
+    },
+  },
+  AsyncMergeResult: {
+    oneOf: [
+      { $ref: '#/components/schemas/AsyncMergePending' },
+      { $ref: '#/components/schemas/AsyncMergeMerged' },
+      { $ref: '#/components/schemas/AsyncMergeEnqueued' },
+      { $ref: '#/components/schemas/AsyncMergeFailed' },
+    ],
+  },
+  PollNextAction: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['method', 'url'],
+    properties: {
+      method: { const: 'GET' },
+      url: { type: 'string' },
+    },
+  },
+  AsyncMergeAccepted: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['outcome', 'merge', 'next'],
+    properties: {
+      outcome: { const: 'accepted' },
+      merge: { $ref: '#/components/schemas/AsyncMergePending' },
+      next: { $ref: '#/components/schemas/PollNextAction' },
+    },
+  },
+  AsyncMergeCompleted: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['outcome', 'merge'],
+    properties: {
+      outcome: { const: 'completed' },
+      merge: {
+        oneOf: [
+          { $ref: '#/components/schemas/AsyncMergeMerged' },
+          { $ref: '#/components/schemas/AsyncMergeEnqueued' },
+        ],
+      },
+    },
+  },
+  AsyncMergeRejected: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['outcome', 'merge'],
+    properties: {
+      outcome: { const: 'rejected' },
+      merge: { $ref: '#/components/schemas/AsyncMergeFailed' },
+    },
+  },
+  AsyncMergeAlreadyPending: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['outcome', 'merge', 'next'],
+    properties: {
+      outcome: { const: 'alreadyPending' },
+      merge: { $ref: '#/components/schemas/AsyncMergePending' },
+      next: { $ref: '#/components/schemas/PollNextAction' },
+    },
+  },
+  PullRequestStackMergeComplete: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['outcome', 'stackNumber', 'skippedMergedPullRequestNumbers'],
+    properties: {
+      outcome: { const: 'complete' },
+      stackNumber: positiveInt,
+      skippedMergedPullRequestNumbers: {
+        type: 'array',
+        items: positiveInt,
+      },
+    },
+  },
+  PullRequestStackMergeBlocked: {
+    type: 'object',
+    additionalProperties: false,
+    required: [
+      'outcome',
+      'stackNumber',
+      'skippedMergedPullRequestNumbers',
+      'blocker',
+    ],
+    properties: {
+      outcome: { const: 'blocked' },
+      stackNumber: positiveInt,
+      skippedMergedPullRequestNumbers: {
+        type: 'array',
+        items: positiveInt,
+      },
+      blocker: {
+        type: 'object',
+        additionalProperties: false,
+        required: ['pullRequestNumber', 'reason'],
+        properties: {
+          pullRequestNumber: positiveInt,
+          reason: { type: 'string', enum: ['draft', 'closed'] },
+        },
+      },
+    },
+  },
+  PullRequestStackMergeAccepted: {
+    type: 'object',
+    additionalProperties: false,
+    required: [
+      'outcome',
+      'stackNumber',
+      'targetPullRequestNumber',
+      'skippedMergedPullRequestNumbers',
+      'submission',
+      'next',
+    ],
+    properties: {
+      outcome: { const: 'submitted' },
+      stackNumber: positiveInt,
+      targetPullRequestNumber: positiveInt,
+      skippedMergedPullRequestNumbers: {
+        type: 'array',
+        items: positiveInt,
+      },
+      submission: { $ref: '#/components/schemas/AsyncMergeAccepted' },
+      next: { $ref: '#/components/schemas/PollNextAction' },
+    },
+  },
+  PullRequestStackMergeCompleted: {
+    type: 'object',
+    additionalProperties: false,
+    required: [
+      'outcome',
+      'stackNumber',
+      'targetPullRequestNumber',
+      'skippedMergedPullRequestNumbers',
+      'submission',
+    ],
+    properties: {
+      outcome: { const: 'submitted' },
+      stackNumber: positiveInt,
+      targetPullRequestNumber: positiveInt,
+      skippedMergedPullRequestNumbers: {
+        type: 'array',
+        items: positiveInt,
+      },
+      submission: { $ref: '#/components/schemas/AsyncMergeCompleted' },
+    },
+  },
+  PullRequestStackMergeRejected: {
+    type: 'object',
+    additionalProperties: false,
+    required: [
+      'outcome',
+      'stackNumber',
+      'targetPullRequestNumber',
+      'skippedMergedPullRequestNumbers',
+      'submission',
+    ],
+    properties: {
+      outcome: { const: 'submitted' },
+      stackNumber: positiveInt,
+      targetPullRequestNumber: positiveInt,
+      skippedMergedPullRequestNumbers: {
+        type: 'array',
+        items: positiveInt,
+      },
+      submission: { $ref: '#/components/schemas/AsyncMergeRejected' },
+    },
+  },
+  PullRequestStackMergeAlreadyPending: {
+    type: 'object',
+    additionalProperties: false,
+    required: [
+      'outcome',
+      'stackNumber',
+      'targetPullRequestNumber',
+      'skippedMergedPullRequestNumbers',
+      'submission',
+      'next',
+    ],
+    properties: {
+      outcome: { const: 'submitted' },
+      stackNumber: positiveInt,
+      targetPullRequestNumber: positiveInt,
+      skippedMergedPullRequestNumbers: {
+        type: 'array',
+        items: positiveInt,
+      },
+      submission: { $ref: '#/components/schemas/AsyncMergeAlreadyPending' },
+      next: { $ref: '#/components/schemas/PollNextAction' },
+    },
+  },
+  PullRequestStackMergeOk: {
+    oneOf: [
+      { $ref: '#/components/schemas/PullRequestStackMergeComplete' },
+      { $ref: '#/components/schemas/PullRequestStackMergeCompleted' },
+    ],
+  },
+  PullRequestStackMergeConflict: {
+    oneOf: [
+      { $ref: '#/components/schemas/PullRequestStackMergeBlocked' },
+      { $ref: '#/components/schemas/PullRequestStackMergeAlreadyPending' },
+    ],
+  },
   PullRequestReview: {
     type: 'object',
     additionalProperties: false,
@@ -409,7 +767,7 @@ const responseSchemas = {
       state: {
         type: 'string',
         description:
-          'PENDING for an unsubmitted review; otherwise GitHub\'s submitted review state.',
+          "PENDING for an unsubmitted review; otherwise GitHub's submitted review state.",
       },
       body: { type: ['string', 'null'] },
       submittedAt: {
@@ -435,6 +793,17 @@ export interface Endpoint {
   readonly summary: string;
   readonly returns: string;
   readonly responseBody?: keyof typeof responseSchemas;
+  readonly responses?: Readonly<
+    Partial<
+      Record<
+        200 | 201 | 202 | 204 | 400 | 409,
+        {
+          readonly description: string;
+          readonly responseBody?: keyof typeof responseSchemas | 'Error';
+        }
+      >
+    >
+  >;
   readonly params?: readonly (keyof typeof parameters)[];
   readonly body?: keyof typeof bodySchemas;
   readonly status?: 200 | 201;
@@ -703,9 +1072,27 @@ export const endpoints: readonly Endpoint[] = [
     operationId: 'mergePullRequestAsync',
     summary:
       'Atomically merge this pull request and any stacked pull requests below it',
-    returns: 'AsyncMergeResult',
+    returns: 'AsyncMergeSubmission',
     params: pullParams,
     body: 'MergePullRequestAsync',
+    responses: {
+      200: {
+        description: 'Already merged or enqueued',
+        responseBody: 'AsyncMergeCompleted',
+      },
+      202: {
+        description: 'Asynchronous merge accepted; poll next.url',
+        responseBody: 'AsyncMergeAccepted',
+      },
+      400: {
+        description: 'Pull request is not ready to merge',
+        responseBody: 'AsyncMergeRejected',
+      },
+      409: {
+        description: 'An asynchronous merge is already pending; poll next.url',
+        responseBody: 'AsyncMergeAlreadyPending',
+      },
+    },
     write: true,
   },
   {
@@ -715,6 +1102,7 @@ export const endpoints: readonly Endpoint[] = [
     operationId: 'getPullRequestMergeResult',
     summary: 'Poll an asynchronous pull-request merge',
     returns: 'AsyncMergeResult',
+    responseBody: 'AsyncMergeResult',
     params: [...pullParams, 'mergeId'],
   },
   {
@@ -885,7 +1273,8 @@ export const endpoints: readonly Endpoint[] = [
     tag: 'stacks',
     operationId: 'listPullRequestStacks',
     summary: 'List pull-request stacks',
-    returns: 'PullRequestStack[]',
+    returns: 'PullRequestStackSummary[]',
+    responseBody: 'PullRequestStackSummaryList',
     params: [...repoParams, 'pullNumberFilter', ...pagination],
   },
   {
@@ -895,6 +1284,7 @@ export const endpoints: readonly Endpoint[] = [
     operationId: 'getPullRequestStack',
     summary: 'Get a pull-request stack',
     returns: 'PullRequestStack',
+    responseBody: 'PullRequestStack',
     params: stackParams,
   },
   {
@@ -907,6 +1297,7 @@ export const endpoints: readonly Endpoint[] = [
     params: repoParams,
     body: 'CreatePullRequestStack',
     status: 201,
+    responseBody: 'PullRequestStack',
     write: true,
   },
   {
@@ -918,6 +1309,16 @@ export const endpoints: readonly Endpoint[] = [
     returns: 'PullRequestStack',
     params: stackParams,
     body: 'AddPullRequestsToStack',
+    responses: {
+      200: {
+        description: 'Updated pull-request stack',
+        responseBody: 'PullRequestStack',
+      },
+      409: {
+        description: 'The stack is being modified by another request',
+        responseBody: 'Error',
+      },
+    },
     write: true,
   },
   {
@@ -926,9 +1327,50 @@ export const endpoints: readonly Endpoint[] = [
     tag: 'stacks',
     operationId: 'unstackPullRequests',
     summary: 'Remove eligible pull requests from a stack',
-    returns: 'PullRequestStack | null',
+    returns: 'PullRequestStack | no content',
     params: stackParams,
     body: 'Confirm',
+    responses: {
+      200: {
+        description: 'Pull requests remain in the updated stack',
+        responseBody: 'PullRequestStack',
+      },
+      204: { description: 'The stack was dissolved' },
+      409: {
+        description: 'The stack is being modified by another request',
+        responseBody: 'Error',
+      },
+    },
+    write: true,
+  },
+  {
+    method: 'put',
+    path: '/repos/{owner}/{repo}/stacks/{stackNumber}/merge-async',
+    tag: 'stacks',
+    operationId: 'mergePullRequestStack',
+    summary: 'Merge the whole stack using GitHub atomic stack merge',
+    returns: 'PullRequestStackMergeResult',
+    params: stackParams,
+    body: 'MergePullRequestAsync',
+    responses: {
+      200: {
+        description: 'Stack already complete, merged immediately, or enqueued',
+        responseBody: 'PullRequestStackMergeOk',
+      },
+      202: {
+        description: 'Stack merge accepted; poll next.url',
+        responseBody: 'PullRequestStackMergeAccepted',
+      },
+      400: {
+        description: 'GitHub rejected the selected stack merge target',
+        responseBody: 'PullRequestStackMergeRejected',
+      },
+      409: {
+        description:
+          'The stack is blocked or its selected pull request already has a merge pending',
+        responseBody: 'PullRequestStackMergeConflict',
+      },
+    },
     write: true,
   },
   {
@@ -981,16 +1423,38 @@ const operation = (endpoint: Endpoint): Record<string, unknown> => ({
       }
     : {}),
   responses: {
-    [String(endpoint.status ?? 200)]: {
-      description: endpoint.returns,
-      content: {
-        'application/json': {
-          schema: endpoint.responseBody
-            ? { $ref: `#/components/schemas/${endpoint.responseBody}` }
-            : {},
-        },
-      },
-    },
+    ...(endpoint.responses
+      ? Object.fromEntries(
+          Object.entries(endpoint.responses).map(([status, response]) => [
+            status,
+            {
+              description: response.description,
+              ...(response.responseBody
+                ? {
+                    content: {
+                      'application/json': {
+                        schema: {
+                          $ref: `#/components/schemas/${response.responseBody}`,
+                        },
+                      },
+                    },
+                  }
+                : {}),
+            },
+          ]),
+        )
+      : {
+          [String(endpoint.status ?? 200)]: {
+            description: endpoint.returns,
+            content: {
+              'application/json': {
+                schema: endpoint.responseBody
+                  ? { $ref: `#/components/schemas/${endpoint.responseBody}` }
+                  : {},
+              },
+            },
+          },
+        }),
     default: { $ref: '#/components/responses/Error' },
   },
 });

@@ -24,7 +24,7 @@ An LLM using Marlow pays tokens in two predictable places:
 
 **Zero new API surface.** No new params, no projection/field-selection, no alternate formats, no
 query endpoints, no new routes. The whole point of Marlow is least-privilege minimalism; token work
-must come from *returning less by default* and *slimming discovery*, never from adding levers.
+must come from _returning less by default_ and _slimming discovery_, never from adding levers.
 The field-stripping security guarantee (raw GitHub payloads never leak; see the
 `secret_internal_field` test in `github.spec.ts`) must be preserved.
 
@@ -33,12 +33,13 @@ The field-stripping security guarantee (raw GitHub payloads never leak; see the
 - Cut the recurring per-session discovery cost.
 - Cut list-payload size by dropping unbounded free-text from list rows.
 - Make page size explicit and predictable.
-- Keep the agent's contract honest: a field that isn't returned must be *absent from the type*, not
+- Keep the agent's contract honest: a field that isn't returned must be _absent from the type_, not
   returned as `null` (which would conflate "empty" with "not fetched").
 
 ## Decisions (resolved in brainstorm)
 
 ### D1 — List endpoints return summary DTOs; body/message omitted entirely
+
 Split the one-DTO-per-entity model into **list-summary vs detail**:
 
 - New `IssueSummary` = `Issue` minus `body`. `listIssues` → `IssueSummary[]`; `getIssue` → `Issue` (full body).
@@ -48,11 +49,12 @@ Split the one-DTO-per-entity model into **list-summary vs detail**:
   message via `getCommit` → `CommitDetail`. (Commits differ from issues/PRs: an empty message is
   useless, so we truncate to the headline rather than omit — same principle, drop the unbounded part.)
 
-Rationale: the type tells the truth ("body not here — call `getIssue`"); summaries strip *strictly
-more* fields than today, so the security guarantee is preserved/strengthened. Small structured fields
+Rationale: the type tells the truth ("body not here — call `getIssue`"); summaries strip _strictly
+more_ fields than today, so the security guarantee is preserved/strengthened. Small structured fields
 (labels, assignees, milestone, state, refs, counts, timestamps) stay — they're cheap and useful for triage.
 
 ### D2 — Generated cheat-sheet + slimmed on-demand doc
+
 - Add `buildCheatSheet(endpoints)` driven by the **same `endpoints[]` array** that feeds
   `buildOpenApiDocument()` (`apps/marlow-api/src/app/openapi.ts`) — one terse line per route
   (method, path, query keys, required body keys, returns type, write marker).
@@ -68,10 +70,11 @@ more* fields than today, so the security guarantee is preserved/strengthened. Sm
   Nx-specific and never loads for an agent working in `nrwl/ocean`/`nrwl/nx`).
 
 ### D3 — Explicit default page size
+
 Default `perPage` to **30** in `paginationQuerySchema`
 (`libs/marlow/api-contracts/src/lib/common.schema.ts`, `.default(30)`), applied uniformly. Today
 there's no default, so GitHub's implicit default (30) silently applies. This makes cost predictable
-and is the *only* zero-surface lever for the comment-list endpoints (whose bodies can't be stripped —
+and is the _only_ zero-surface lever for the comment-list endpoints (whose bodies can't be stripped —
 the body is what you asked for). One-line change; trivially re-tunable later.
 
 ## Scope boundaries (non-goals)

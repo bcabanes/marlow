@@ -35,6 +35,7 @@ describe('mapGitHubError', () => {
   it('maps HTTP statuses to transport-neutral kinds', () => {
     expect(mapGitHubError(requestError(401)).kind).toBe('unauthorized');
     expect(mapGitHubError(requestError(404)).kind).toBe('not_found');
+    expect(mapGitHubError(requestError(409)).kind).toBe('conflict');
     expect(mapGitHubError(requestError(422)).kind).toBe('validation_failed');
     expect(mapGitHubError(requestError(503)).kind).toBe('unavailable');
   });
@@ -55,20 +56,24 @@ describe('mapGitHubError', () => {
     expect(mapped.message).toContain('404');
   });
 
-  it('recognizes GitHub\'s one-pending-review conflict without exposing raw data', () => {
+  it("recognizes GitHub's one-pending-review conflict without exposing raw data", () => {
     const mapped = mapGitHubError(
-      requestError(422, {}, {
-        message: 'Validation Failed',
-        errors: [
-          {
-            resource: 'PullRequestReview',
-            field: 'user_id',
-            code: 'custom',
-            message:
-              'user_id can only have one pending review per pull request',
-          },
-        ],
-      }),
+      requestError(
+        422,
+        {},
+        {
+          message: 'Validation Failed',
+          errors: [
+            {
+              resource: 'PullRequestReview',
+              field: 'user_id',
+              code: 'custom',
+              message:
+                'user_id can only have one pending review per pull request',
+            },
+          ],
+        },
+      ),
     );
 
     expect(mapped.kind).toBe('pending_review_exists');
@@ -421,8 +426,7 @@ describe('createGitHubRepositoryAdapter', () => {
           user: { login: 'octocat' },
           state: 'CHANGES_REQUESTED',
           body: 'Please rename this',
-          html_url:
-            'https://github.com/nrwl/nx/pull/42#pullrequestreview-901',
+          html_url: 'https://github.com/nrwl/nx/pull/42#pullrequestreview-901',
           submitted_at: '2020-01-03T00:00:00Z',
           secret_internal_field: 'should-not-appear',
         },
@@ -431,8 +435,7 @@ describe('createGitHubRepositoryAdapter', () => {
           user: null,
           state: 'APPROVED',
           body: '',
-          html_url:
-            'https://github.com/nrwl/nx/pull/42#pullrequestreview-902',
+          html_url: 'https://github.com/nrwl/nx/pull/42#pullrequestreview-902',
           submitted_at: null,
         },
       ],
@@ -632,8 +635,7 @@ describe('createGitHubRepositoryAdapter', () => {
         user: { login: 'octocat' },
         state: 'COMMENTED',
         body: 'Summary',
-        html_url:
-          'https://github.com/nrwl/nx/pull/42#pullrequestreview-903',
+        html_url: 'https://github.com/nrwl/nx/pull/42#pullrequestreview-903',
         submitted_at: '2020-01-03T00:00:00Z',
       },
     });
@@ -692,8 +694,7 @@ describe('createGitHubRepositoryAdapter', () => {
         user: { login: 'octocat' },
         state: 'PENDING',
         body: null,
-        html_url:
-          'https://github.com/nrwl/nx/pull/42#pullrequestreview-904',
+        html_url: 'https://github.com/nrwl/nx/pull/42#pullrequestreview-904',
       },
     });
     const adapter = createGitHubRepositoryAdapter({

@@ -150,7 +150,12 @@ export const registerIssuesRoutes = (
       const body = addLabelsBodySchema.parse(request.body);
       const port = await deps.getGitHubPort();
       return unwrapResult(
-        await addLabels(port)({ owner, repo, issueNumber, labels: body.labels }),
+        await addLabels(port)({
+          owner,
+          repo,
+          issueNumber,
+          labels: body.labels,
+        }),
       );
     },
   );
