@@ -19,8 +19,7 @@ export const domainErrorToApiError = (error: DomainError): ApiError =>
     ? repoNotAllowed(error.message)
     : validationFailed(error.message);
 
-/** Maps a GitHub port failure (thrown by the adapter) to a transport error. */
-export const githubErrorToApiError = (error: GitHubPortError): ApiError => {
+const apiErrorForGitHubKind = (error: GitHubPortError): ApiError => {
   switch (error.kind) {
     case 'unauthorized':
       return unauthorized('GitHub authentication failed');
@@ -44,6 +43,20 @@ export const githubErrorToApiError = (error: GitHubPortError): ApiError => {
     default:
       return internal();
   }
+};
+
+/**
+ * Maps a GitHub port failure (thrown by the adapter) to a transport error.
+ * GitHub's own `message` and `errors[]` ride along as public
+ * `details.github`, so a caller can see which field GitHub rejected and why.
+ */
+export const githubErrorToApiError = (error: GitHubPortError): ApiError => {
+  const apiError = apiErrorForGitHubKind(error);
+  if (error.upstream === undefined) return apiError;
+  return new ApiError(apiError.status, apiError.code, apiError.message, {
+    details: { github: error.upstream },
+    detailsVisibility: 'public',
+  });
 };
 
 /** Returns the success value, or throws the mapped ApiError for the error handler. */

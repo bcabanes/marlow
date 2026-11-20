@@ -1,5 +1,13 @@
-import { getCombinedStatus, listCheckRuns } from '@org/marlow-application';
 import {
+  getCombinedStatus,
+  getPullRequestChecks,
+  listCheckRuns,
+  rerunCheckRun,
+} from '@org/marlow-application';
+import {
+  checkRunParamsSchema,
+  confirmBodySchema,
+  pullNumberParamsSchema,
   repoParamsSchema,
   statusRefQuerySchema,
 } from '@org/marlow-api-contracts';
@@ -24,4 +32,31 @@ export const registerStatusesRoutes = (
     const port = await deps.getGitHubPort();
     return unwrapResult(await listCheckRuns(port)({ owner, repo, ref }));
   });
+
+  fastify.post(
+    '/repos/:owner/:repo/check-runs/:checkRunId/rerequest',
+    async (request) => {
+      const { owner, repo, checkRunId } = checkRunParamsSchema.parse(
+        request.params,
+      );
+      confirmBodySchema.parse(request.body);
+      const port = await deps.getGitHubPort();
+      return unwrapResult(
+        await rerunCheckRun(port)({ owner, repo, checkRunId }),
+      );
+    },
+  );
+
+  fastify.get(
+    '/repos/:owner/:repo/pulls/:pullNumber/checks',
+    async (request) => {
+      const { owner, repo, pullNumber } = pullNumberParamsSchema.parse(
+        request.params,
+      );
+      const port = await deps.getGitHubPort();
+      return unwrapResult(
+        await getPullRequestChecks(port)({ owner, repo, pullNumber }),
+      );
+    },
+  );
 };

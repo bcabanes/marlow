@@ -19,6 +19,7 @@ export const createLazyGitHubPort = (
   searchCode: (input) => resolve().then((p) => p.searchCode(input)),
   listCommits: (input) => resolve().then((p) => p.listCommits(input)),
   getCommit: (input) => resolve().then((p) => p.getCommit(input)),
+  compareCommits: (input) => resolve().then((p) => p.compareCommits(input)),
   listIssues: (input) => resolve().then((p) => p.listIssues(input)),
   getIssue: (input) => resolve().then((p) => p.getIssue(input)),
   createIssue: (input) => resolve().then((p) => p.createIssue(input)),
@@ -72,4 +73,5 @@ export const createLazyGitHubPort = (
   getCombinedStatus: (input) =>
     resolve().then((p) => p.getCombinedStatus(input)),
   listCheckRuns: (input) => resolve().then((p) => p.listCheckRuns(input)),
+  rerunCheckRun: (input) => resolve().then((p) => p.rerunCheckRun(input)),
 });

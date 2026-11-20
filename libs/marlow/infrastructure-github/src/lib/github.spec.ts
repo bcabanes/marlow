@@ -1,5 +1,7 @@
 import { GitHubPortError } from '@org/marlow-application';
 import type {
+  CheckRunId,
+  CompareRange,
   FilePath,
   GitRef,
   GitSha,
@@ -80,6 +82,88 @@ describe('mapGitHubError', () => {
     expect(mapped.message).toBe(
       'GitHub rejected the review because a pending review already exists',
     );
+  });
+
+  it("carries GitHub's message and errors[] but never headers or tokens", () => {
+    const mapped = mapGitHubError(
+      requestError(
+        422,
+        {
+          authorization: 'token ghp_headersecret0000000000000000',
+          'x-github-request-id': 'REQ-123',
+        },
+        {
+          message: 'Validation Failed',
+          documentation_url: 'https://docs.github.com/rest',
+          errors: [
+            {
+              resource: 'PullRequest',
+              field: 'base',
+              code: 'invalid',
+              message: 'base ghp_bodysecret00000000000000000 is invalid',
+            },
+            'A pull request already exists for nrwl:feature.',
+          ],
+        },
+      ),
+    );
+
+    expect(mapped.kind).toBe('validation_failed');
+    expect(mapped.upstream).toEqual({
+      message: 'Validation Failed',
+      errors: [
+        {
+          resource: 'PullRequest',
+          field: 'base',
+          code: 'invalid',
+          message: 'base [redacted] is invalid',
+        },
+        { message: 'A pull request already exists for nrwl:feature.' },
+      ],
+    });
+    const serialized = JSON.stringify(mapped.upstream);
+    expect(serialized).not.toContain('ghp_');
+    expect(serialized).not.toContain('REQ-123');
+  });
+
+  it('carries the top-level message of a non-422 failure', () => {
+    const mapped = mapGitHubError(
+      requestError(403, {}, { message: 'Resource not accessible by token' }),
+    );
+
+    expect(mapped.kind).toBe('forbidden');
+    expect(mapped.upstream).toEqual({
+      message: 'Resource not accessible by token',
+      errors: [],
+    });
+  });
+
+  it('maps GraphQL response errors by their type and keeps their messages', () => {
+    const graphqlError = Object.assign(new Error('Request failed'), {
+      name: 'GraphqlResponseError',
+      headers: { authorization: 'token ghp_headersecret0000000000000000' },
+      errors: [
+        {
+          type: 'NOT_FOUND',
+          path: ['convertPullRequestToDraft'],
+          message: "Could not resolve to a node with the global id of 'PR_x'",
+        },
+      ],
+    });
+
+    const mapped = mapGitHubError(graphqlError);
+
+    expect(mapped.kind).toBe('not_found');
+    expect(mapped.upstream).toEqual({
+      message: "Could not resolve to a node with the global id of 'PR_x'",
+      errors: [
+        {
+          code: 'NOT_FOUND',
+          message: "Could not resolve to a node with the global id of 'PR_x'",
+        },
+      ],
+    });
+    expect(JSON.stringify(mapped.upstream)).not.toContain('ghp_');
   });
 });
 
@@ -783,6 +867,383 @@ describe('createGitHubRepositoryAdapter', () => {
     expect(pull.changedFiles).toBe(7);
   });
 
+  it('marks a draft ready for review through GraphQL with the PR node id', async () => {
+    const get = vi
+      .fn()
+      .mockResolvedValueOnce({ data: { ...basePull(42), draft: true } })
+      .mockResolvedValueOnce({ data: { ...basePull(42), draft: false } });
+    const update = vi.fn();
+    const graphql = vi.fn().mockResolvedValue({});
+    const octokit = {
+      rest: { pulls: { get, update } },
+      graphql,
+    } as unknown as Octokit;
+    const adapter = createGitHubRepositoryAdapter(octokit);
+
+    const pull = await adapter.updatePullRequest({
+      repo,
+      pullNumber: 42 as PullRequestNumber,
+      draft: false,
+    });
+
+    expect(pull.draft).toBe(false);
+    expect(graphql).toHaveBeenCalledTimes(1);
+    expect(graphql.mock.calls[0][0]).toContain('markPullRequestReadyForReview');
+    expect(graphql.mock.calls[0][1]).toEqual({ pullRequestId: 'PR_node42' });
+    expect(update).not.toHaveBeenCalled();
+  });
+
+  it('converts to a draft and applies REST edits in the same request', async () => {
+    const get = vi.fn().mockResolvedValue({ data: basePull(42) });
+    const update = vi.fn().mockResolvedValue({
+      data: { ...basePull(42), draft: true, title: 'WIP' },
+    });
+    const graphql = vi.fn().mockResolvedValue({});
+    const octokit = {
+      rest: { pulls: { get, update } },
+      graphql,
+    } as unknown as Octokit;
+    const adapter = createGitHubRepositoryAdapter(octokit);
+
+    const pull = await adapter.updatePullRequest({
+      repo,
+      pullNumber: 42 as PullRequestNumber,
+      title: 'WIP',
+      draft: true,
+    });
+
+    expect(pull).toMatchObject({ draft: true, title: 'WIP' });
+    expect(graphql.mock.calls[0][0]).toContain('convertPullRequestToDraft');
+    expect(update).toHaveBeenCalledWith(
+      expect.objectContaining({ pull_number: 42, title: 'WIP' }),
+    );
+  });
+
+  it('sends no draft mutation when the pull request already has the flag', async () => {
+    const get = vi
+      .fn()
+      .mockResolvedValue({ data: { ...basePull(42), draft: true } });
+    const graphql = vi.fn();
+    const octokit = {
+      rest: { pulls: { get } },
+      graphql,
+    } as unknown as Octokit;
+    const adapter = createGitHubRepositoryAdapter(octokit);
+
+    const pull = await adapter.updatePullRequest({
+      repo,
+      pullNumber: 42 as PullRequestNumber,
+      draft: true,
+    });
+
+    expect(pull.draft).toBe(true);
+    expect(graphql).not.toHaveBeenCalled();
+    expect(get).toHaveBeenCalledTimes(1);
+  });
+
+  it('surfaces mergeability on a single pull request but not on list rows', async () => {
+    const pull = {
+      ...basePull(42),
+      mergeable: false,
+      mergeable_state: 'dirty',
+    };
+    const get = vi.fn().mockResolvedValue({ data: pull });
+    const list = vi.fn().mockResolvedValue({ data: [pull] });
+    const octokit = { rest: { pulls: { get, list } } } as unknown as Octokit;
+    const adapter = createGitHubRepositoryAdapter(octokit);
+
+    const detailed = await adapter.getPullRequest({
+      repo,
+      pullNumber: 42 as PullRequestNumber,
+    });
+    const listed = await adapter.listPullRequests({ repo, state: 'open' });
+
+    expect(detailed.mergeable).toBe(false);
+    expect(detailed.mergeableState).toBe('dirty');
+    expect(listed[0]).not.toHaveProperty('mergeable');
+    expect(listed[0]).not.toHaveProperty('mergeableState');
+  });
+
+  it('reports mergeability as null while GitHub is still computing it', async () => {
+    const get = vi.fn().mockResolvedValue({
+      data: { ...basePull(42), mergeable: null, mergeable_state: 'unknown' },
+    });
+    const octokit = { rest: { pulls: { get } } } as unknown as Octokit;
+    const adapter = createGitHubRepositoryAdapter(octokit);
+
+    const pull = await adapter.getPullRequest({
+      repo,
+      pullNumber: 42 as PullRequestNumber,
+    });
+
+    expect(pull.mergeable).toBeNull();
+    expect(pull.mergeableState).toBe('unknown');
+  });
+
+  it('maps check-run detail and cuts long summaries with a flag', async () => {
+    const longSummary = 'x'.repeat(2500);
+    const listForRef = vi.fn().mockResolvedValue({
+      data: {
+        total_count: 2,
+        check_runs: [
+          baseCheckRun(11, {
+            app: { slug: 'github-actions' },
+            output: { title: 'Lint failed', summary: longSummary },
+          }),
+          baseCheckRun(12, {
+            app: { slug: 'nx-cloud' },
+            output: { title: null, summary: 'All good' },
+          }),
+        ],
+      },
+    });
+    const octokit = {
+      rest: { checks: { listForRef } },
+    } as unknown as Octokit;
+    const adapter = createGitHubRepositoryAdapter(octokit);
+
+    const runs = await adapter.listCheckRuns({
+      repo,
+      ref: 'a'.repeat(40) as GitRef,
+    });
+
+    expect(runs[0]).toEqual({
+      id: 11,
+      name: 'check-11',
+      status: 'completed',
+      conclusion: 'failure',
+      app: 'github-actions',
+      detailsUrl: 'https://github.com/nrwl/nx/actions/runs/1/job/11',
+      startedAt: '2020-01-01T00:00:00Z',
+      completedAt: '2020-01-01T00:05:00Z',
+      title: 'Lint failed',
+      summary: 'x'.repeat(2000),
+      summaryTruncated: true,
+    });
+    expect(runs[1].summary).toBe('All good');
+    expect(runs[1].summaryTruncated).toBe(false);
+    expect(runs[1].app).toBe('nx-cloud');
+  });
+
+  it('re-runs a GitHub Actions check through the Actions job endpoint', async () => {
+    const get = vi.fn().mockResolvedValue({
+      data: baseCheckRun(399444496, { app: { slug: 'github-actions' } }),
+    });
+    const reRunJobForWorkflowRun = vi.fn().mockResolvedValue({ status: 201 });
+    const rerequestRun = vi.fn();
+    const octokit = {
+      rest: {
+        checks: { get, rerequestRun },
+        actions: { reRunJobForWorkflowRun },
+      },
+    } as unknown as Octokit;
+    const adapter = createGitHubRepositoryAdapter(octokit);
+
+    const result = await adapter.rerunCheckRun({
+      repo,
+      checkRunId: 399444496 as CheckRunId,
+    });
+
+    expect(result).toEqual({
+      via: 'actions_job_rerun',
+      checkRunId: 399444496,
+      jobId: 399444496,
+    });
+    expect(reRunJobForWorkflowRun).toHaveBeenCalledWith({
+      owner: 'nrwl',
+      repo: 'nx',
+      job_id: 399444496,
+    });
+    expect(rerequestRun).not.toHaveBeenCalled();
+  });
+
+  it('rerequests a check run owned by any other app', async () => {
+    const get = vi.fn().mockResolvedValue({
+      data: baseCheckRun(77, { app: { slug: 'nx-cloud' } }),
+    });
+    const reRunJobForWorkflowRun = vi.fn();
+    const rerequestRun = vi.fn().mockResolvedValue({ status: 201 });
+    const octokit = {
+      rest: {
+        checks: { get, rerequestRun },
+        actions: { reRunJobForWorkflowRun },
+      },
+    } as unknown as Octokit;
+    const adapter = createGitHubRepositoryAdapter(octokit);
+
+    const result = await adapter.rerunCheckRun({
+      repo,
+      checkRunId: 77 as CheckRunId,
+    });
+
+    expect(result).toEqual({
+      via: 'check_run_rerequest',
+      checkRunId: 77,
+      app: 'nx-cloud',
+    });
+    expect(rerequestRun).toHaveBeenCalledWith({
+      owner: 'nrwl',
+      repo: 'nx',
+      check_run_id: 77,
+    });
+    expect(reRunJobForWorkflowRun).not.toHaveBeenCalled();
+  });
+
+  it('compares two refs with bounded pages and patch-free files', async () => {
+    const actor = {
+      name: 'Octo',
+      email: 'octo@example.com',
+      date: '2020-01-01T00:00:00Z',
+    };
+    const compareCommitsWithBasehead = vi.fn().mockResolvedValue({
+      data: {
+        status: 'ahead',
+        ahead_by: 2,
+        behind_by: 0,
+        total_commits: 2,
+        commits: [
+          {
+            sha: 'a'.repeat(40),
+            commit: {
+              message: 'feat: one\n\nlong body',
+              author: actor,
+              committer: actor,
+            },
+          },
+        ],
+        files: [
+          {
+            filename: 'libs/a.ts',
+            status: 'modified',
+            additions: 3,
+            deletions: 1,
+            changes: 4,
+            patch: '@@ -1 +1 @@ secret diff text',
+          },
+        ],
+      },
+    });
+    const octokit = {
+      rest: { repos: { compareCommitsWithBasehead } },
+    } as unknown as Octokit;
+    const adapter = createGitHubRepositoryAdapter(octokit);
+
+    const comparison = await adapter.compareCommits({
+      repo,
+      range: { base: 'main', head: 'feat/x' } as CompareRange,
+      page: 2,
+      perPage: 10,
+    });
+
+    expect(compareCommitsWithBasehead).toHaveBeenCalledWith({
+      owner: 'nrwl',
+      repo: 'nx',
+      basehead: 'main...feat/x',
+      page: 2,
+      per_page: 10,
+    });
+    expect(comparison).toEqual({
+      status: 'ahead',
+      aheadBy: 2,
+      behindBy: 0,
+      totalCommits: 2,
+      commits: [
+        {
+          sha: 'a'.repeat(40),
+          messageHeadline: 'feat: one',
+          author: actor,
+          committer: actor,
+        },
+      ],
+      files: [
+        {
+          filename: 'libs/a.ts',
+          status: 'modified',
+          additions: 3,
+          deletions: 1,
+          changes: 4,
+        },
+      ],
+    });
+    expect(JSON.stringify(comparison)).not.toContain('secret diff text');
+  });
+
+  it("reports the next files page from GitHub's Link header", async () => {
+    const file = {
+      filename: 'libs/a.ts',
+      status: 'modified',
+      additions: 1,
+      deletions: 0,
+      changes: 1,
+      patch: 'diff text',
+    };
+    const listFiles = vi
+      .fn()
+      .mockResolvedValueOnce({
+        data: [file],
+        headers: {
+          link: '<https://api.github.com/repositories/1/pulls/42/files?per_page=100&page=3>; rel="next", <https://api.github.com/repositories/1/pulls/42/files?per_page=100&page=4>; rel="last"',
+        },
+      })
+      .mockResolvedValueOnce({
+        data: [file],
+        headers: {
+          link: '<https://api.github.com/repositories/1/pulls/42/files?per_page=100&page=3>; rel="prev"',
+        },
+      });
+    const octokit = { rest: { pulls: { listFiles } } } as unknown as Octokit;
+    const adapter = createGitHubRepositoryAdapter(octokit);
+
+    const middle = await adapter.listPullRequestFiles({
+      repo,
+      pullNumber: 42 as PullRequestNumber,
+      page: 2,
+      perPage: 100,
+    });
+    const last = await adapter.listPullRequestFiles({
+      repo,
+      pullNumber: 42 as PullRequestNumber,
+      page: 4,
+      perPage: 100,
+    });
+
+    expect(listFiles).toHaveBeenNthCalledWith(1, {
+      owner: 'nrwl',
+      repo: 'nx',
+      pull_number: 42,
+      page: 2,
+      per_page: 100,
+    });
+    expect(middle).toEqual({
+      files: [
+        {
+          filename: 'libs/a.ts',
+          status: 'modified',
+          additions: 1,
+          deletions: 0,
+          changes: 1,
+        },
+      ],
+      page: 2,
+      perPage: 100,
+      nextPage: 3,
+    });
+    expect(last.nextPage).toBeNull();
+  });
+
+  it('treats a files response without a Link header as the only page', async () => {
+    const listFiles = vi.fn().mockResolvedValue({ data: [], headers: {} });
+    const octokit = { rest: { pulls: { listFiles } } } as unknown as Octokit;
+    const adapter = createGitHubRepositoryAdapter(octokit);
+
+    const page = await adapter.listPullRequestFiles({
+      repo,
+      pullNumber: 42 as PullRequestNumber,
+    });
+
+    expect(page).toEqual({ files: [], page: 1, perPage: 30, nextPage: null });
+  });
+
   it('reduces each listed commit message to its subject headline', async () => {
     const actor = {
       name: 'Octo',
@@ -814,6 +1275,41 @@ describe('createGitHubRepositoryAdapter', () => {
     expect(JSON.stringify(commits)).not.toContain('explanatory body');
   });
 });
+
+function baseCheckRun(id: number, overrides: Record<string, unknown> = {}) {
+  return {
+    id,
+    name: `check-${id}`,
+    status: 'completed',
+    conclusion: 'failure',
+    app: { slug: 'github-actions' },
+    details_url: `https://github.com/nrwl/nx/actions/runs/1/job/${id}`,
+    started_at: '2020-01-01T00:00:00Z',
+    completed_at: '2020-01-01T00:05:00Z',
+    output: { title: null, summary: null },
+    ...overrides,
+  };
+}
+
+function basePull(number: number) {
+  return {
+    number,
+    node_id: `PR_node${number}`,
+    title: 'A change',
+    state: 'open',
+    body: null,
+    user: { login: 'octocat' },
+    head: { ref: 'feature', sha: 'a'.repeat(40) },
+    base: { ref: 'main' },
+    draft: false,
+    merged_at: null,
+    labels: [],
+    assignees: [],
+    milestone: null,
+    created_at: '2020-01-01T00:00:00Z',
+    updated_at: '2020-01-02T00:00:00Z',
+  };
+}
 
 function baseIssue(number: number) {
   return {

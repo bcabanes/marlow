@@ -10,8 +10,14 @@ no body — fetch a single resource for the full body.
 
 ## meta
 
+GET / -> this cheat-sheet (text/markdown)
 GET /openapi.json -> OpenAPI 3.1 document
 GET /health -> { "status": "ok" }
+GET /docs -> 302 to /
+GET /help -> 302 to /
+GET /routes -> 302 to /
+GET /api -> 302 to /
+GET /healthz -> 302 to /health
 
 ## repositories
 
@@ -26,8 +32,9 @@ GET /repos/{owner}/{repo}/search/code ?query,page,perPage -> CodeSearchResult
 
 ## commits
 
-GET /repos/{owner}/{repo}/commits ?ref,path,page,perPage -> CommitListItem[]
+GET /repos/{owner}/{repo}/commits ?ref,sha,path,page,perPage -> CommitListItem[]
 GET /repos/{owner}/{repo}/commits/{sha} -> CommitDetail
+GET /repos/{owner}/{repo}/compare/{basehead} ?page,perPage -> CommitComparison
 
 ## issues
 
@@ -53,8 +60,8 @@ POST /repos/{owner}/{repo}/pulls body{confirm,title,head,base,body?,draft?} -> P
 PUT /repos/{owner}/{repo}/pulls/{pullNumber}/merge-async body{confirm,mergeMethod?,mergeAction?,commitTitle?,commitMessage?,expectedHeadSha?} -> AsyncMergeSubmission
 GET /repos/{owner}/{repo}/pulls/{pullNumber}/merge-async/{mergeId} -> AsyncMergeResult
 POST /repos/{owner}/{repo}/pulls/{pullNumber}/close body{confirm} -> PullRequest
-PATCH /repos/{owner}/{repo}/pulls/{pullNumber} body{confirm,title?,body?,base?} -> PullRequest
-GET /repos/{owner}/{repo}/pulls/{pullNumber}/files ?page,perPage -> PullRequestFile[]
+PATCH /repos/{owner}/{repo}/pulls/{pullNumber} body{confirm,title?,body?,base?,draft?} -> PullRequest
+GET /repos/{owner}/{repo}/pulls/{pullNumber}/files ?page,perPage -> { files: PullRequestFile[], page, perPage, nextPage }
 GET /repos/{owner}/{repo}/pulls/{pullNumber}/commits ?page,perPage -> CommitListItem[]
 GET /repos/{owner}/{repo}/pulls/{pullNumber}/comments ?page,perPage -> ReviewComment[]
 POST /repos/{owner}/{repo}/pulls/{pullNumber}/comments body{confirm,body,commitId,path,subjectType?,line?,side?,startLine?,startSide?} -> ReviewComment
@@ -84,3 +91,5 @@ GET /repos/{owner}/{repo}/commit-status ?ref -> CombinedStatus
 ## checks
 
 GET /repos/{owner}/{repo}/check-runs ?ref -> CheckRun[]
+POST /repos/{owner}/{repo}/check-runs/{checkRunId}/rerequest body{confirm} -> CheckRunRerun
+GET /repos/{owner}/{repo}/pulls/{pullNumber}/checks -> { headSha, checkRuns: CheckRun[], combinedStatus }

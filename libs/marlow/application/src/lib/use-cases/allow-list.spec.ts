@@ -7,6 +7,7 @@ import {
   addLabels,
   checkPermissions,
   clearMilestone,
+  compareCommits,
   closeIssue,
   closePullRequest,
   createIssue,
@@ -18,6 +19,7 @@ import {
   getFileContents,
   getIssue,
   getPullRequest,
+  getPullRequestChecks,
   getPullRequestMergeResult,
   getPullRequestStack,
   listCheckRuns,
@@ -35,6 +37,7 @@ import {
   mergePullRequestStack,
   removeAssignees,
   removeLabel,
+  rerunCheckRun,
   searchCode,
   setMilestone,
   updateIssue,
@@ -208,6 +211,18 @@ const invocations: ReadonlyArray<readonly [string, Invoke]> = [
   [
     'listCheckRuns',
     () => listCheckRuns(throwingPort)({ ...repo, ref: 'main' }),
+  ],
+  [
+    'getPullRequestChecks',
+    () => getPullRequestChecks(throwingPort)({ ...repo, pullNumber: 1 }),
+  ],
+  [
+    'rerunCheckRun',
+    () => rerunCheckRun(throwingPort)({ ...repo, checkRunId: 1 }),
+  ],
+  [
+    'compareCommits',
+    () => compareCommits(throwingPort)({ ...repo, basehead: 'main...next' }),
   ],
 ];
 

@@ -19,9 +19,13 @@ const deps: AppDependencies = {
   getGitHubPort: async () => ({}) as GitHubRepositoryPort,
 };
 
-// Fastify path -> OpenAPI path: `:param` -> `{param}`, trailing `*` -> `{path}`.
+// Fastify path -> OpenAPI path: `:param` -> `{param}`, trailing `*` -> the
+// wildcard's documented name (`{basehead}` for compare, `{path}` otherwise).
 const toOpenApiPath = (url: string): string =>
-  url.replace(/\/\*$/, '/{path}').replace(/:([^/]+)/g, '{$1}');
+  url
+    .replace(/\/compare\/\*$/, '/compare/{basehead}')
+    .replace(/\/\*$/, '/{path}')
+    .replace(/:([^/]+)/g, '{$1}');
 
 describe('openapi document', () => {
   it('documents exactly the routes the app registers', async () => {
@@ -71,6 +75,65 @@ describe('openapi document', () => {
         expect(responses.default).toBeTruthy();
       }
     }
+  });
+
+  it('documents the route index and the 302 aliases agents guess', () => {
+    const doc = buildOpenApiDocument();
+    const index = doc.paths['/'].get as { responses: Record<string, unknown> };
+    expect(Object.keys(index.responses).sort()).toEqual(['200', 'default']);
+    for (const path of ['/docs', '/help', '/routes', '/api', '/healthz']) {
+      const alias = doc.paths[path].get as {
+        responses: Record<string, unknown>;
+      };
+      expect(Object.keys(alias.responses).sort()).toEqual(['302', 'default']);
+    }
+  });
+
+  it('documents the CI, compare, rerun, and paged-files response shapes', () => {
+    const doc = buildOpenApiDocument();
+    const schemas = doc.components.schemas;
+    const responseRef = (path: string, method: 'get' | 'post') =>
+      (
+        doc.paths[path][method] as {
+          responses: {
+            '200': { content: { 'application/json': { schema: unknown } } };
+          };
+        }
+      ).responses['200'].content['application/json'].schema;
+
+    expect(
+      responseRef('/repos/{owner}/{repo}/pulls/{pullNumber}/checks', 'get'),
+    ).toEqual({ $ref: '#/components/schemas/PullRequestChecks' });
+    expect(
+      responseRef('/repos/{owner}/{repo}/compare/{basehead}', 'get'),
+    ).toEqual({ $ref: '#/components/schemas/CommitComparison' });
+    expect(
+      responseRef(
+        '/repos/{owner}/{repo}/check-runs/{checkRunId}/rerequest',
+        'post',
+      ),
+    ).toEqual({ $ref: '#/components/schemas/CheckRunRerun' });
+    expect(
+      responseRef('/repos/{owner}/{repo}/pulls/{pullNumber}/files', 'get'),
+    ).toEqual({ $ref: '#/components/schemas/PullRequestFilePage' });
+
+    expect(schemas.CheckRun.required).toEqual(
+      expect.arrayContaining([
+        'id',
+        'detailsUrl',
+        'startedAt',
+        'completedAt',
+        'app',
+        'title',
+        'summary',
+        'summaryTruncated',
+      ]),
+    );
+    expect(schemas.CheckRunRerun.oneOf).toHaveLength(2);
+    expect(schemas.PullRequestFilePage.required).toContain('nextPage');
+    expect(schemas.UpdatePullRequest.properties.draft).toEqual({
+      type: 'boolean',
+    });
   });
 
   it('documents the conditional review-comment write contracts', () => {

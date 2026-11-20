@@ -60,20 +60,28 @@ export const createPullRequestBodySchema = z.object({
 });
 export type CreatePullRequestBody = z.infer<typeof createPullRequestBodySchema>;
 
-/** Body for updating a pull request. Write endpoint: requires `confirm: true`. */
+/**
+ * Body for updating a pull request. Write endpoint: requires `confirm: true`.
+ * `draft: false` marks a draft ready for review; `draft: true` converts an
+ * open pull request back to a draft.
+ */
 export const updatePullRequestBodySchema = z
   .object({
     confirm: z.literal(true),
     title: z.string().min(1).max(256).optional(),
     body: z.string().max(65536).optional(),
     base: z.string().min(1).optional(),
+    draft: z.boolean().optional(),
   })
   .refine(
     (value) =>
       value.title !== undefined ||
       value.body !== undefined ||
-      value.base !== undefined,
-    { message: 'Provide at least one of title, body, or base to update' },
+      value.base !== undefined ||
+      value.draft !== undefined,
+    {
+      message: 'Provide at least one of title, body, base, or draft to update',
+    },
   );
 export type UpdatePullRequestBody = z.infer<typeof updatePullRequestBodySchema>;
 

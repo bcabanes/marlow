@@ -12,7 +12,8 @@ export interface ApiErrorBody {
 export interface ToErrorResponseOptions {
   /**
    * When false (the production default), server-side (5xx) error messages and
-   * all `details` are suppressed so internal information never leaks to clients.
+   * all `internal` details are suppressed so internal information never leaks
+   * to clients. `public` details on a 4xx error are always returned.
    */
   readonly exposeInternals: boolean;
 }
@@ -27,7 +28,11 @@ export const toErrorResponse = (
       ? 'Internal server error'
       : error.message;
 
-  if (options.exposeInternals && error.details !== undefined) {
+  const showDetails =
+    error.details !== undefined &&
+    (options.exposeInternals ||
+      (error.detailsVisibility === 'public' && !isServerError));
+  if (showDetails) {
     return { error: { code: error.code, message, details: error.details } };
   }
   return { error: { code: error.code, message } };

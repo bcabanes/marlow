@@ -4,6 +4,7 @@ import {
   GitHubPortError,
   GitHubRepositoryPort,
 } from '@org/marlow-application';
+import { compareRangeToString } from '@org/marlow-domain';
 import type { Octokit } from 'octokit';
 import { RequestError } from 'octokit';
 import { mapGitHubError } from './github-error-mapper.js';
@@ -13,6 +14,7 @@ import {
   mapCheckRuns,
   mapCodeSearch,
   mapCombinedStatus,
+  mapCommitComparison,
   mapCommitDetail,
   mapCommitListItem,
   mapFileContents,
@@ -21,6 +23,7 @@ import {
   mapIssueSummary,
   mapLabelSet,
   mapMilestoneResult,
+  mapPageInfo,
   mapPermissionCheck,
   mapPullRequest,
   mapPullRequestFile,
@@ -37,9 +40,33 @@ import {
   parsePullRequestStackSummaries,
 } from './github-stack.schema.js';
 
+type PullGetData = Awaited<ReturnType<Octokit['rest']['pulls']['get']>>['data'];
+
 const STACKS_API_HEADERS = {
   'X-GitHub-Api-Version': '2026-03-10',
 } as const;
+
+// Check runs created by GitHub Actions belong to this app. An Actions check
+// run's id is its job id: GitHub's job example pairs job id 399444496 with
+// check_run_url .../check-runs/399444496.
+const GITHUB_ACTIONS_APP_SLUG = 'github-actions';
+
+// REST cannot change a pull request's draft state; only GraphQL can.
+const CONVERT_PULL_REQUEST_TO_DRAFT_MUTATION = `
+  mutation ConvertPullRequestToDraft($pullRequestId: ID!) {
+    convertPullRequestToDraft(input: { pullRequestId: $pullRequestId }) {
+      clientMutationId
+    }
+  }
+`;
+
+const MARK_PULL_REQUEST_READY_FOR_REVIEW_MUTATION = `
+  mutation MarkPullRequestReadyForReview($pullRequestId: ID!) {
+    markPullRequestReadyForReview(input: { pullRequestId: $pullRequestId }) {
+      clientMutationId
+    }
+  }
+`;
 
 const asyncMergeSubmissionFor = (
   status: number,
@@ -210,6 +237,18 @@ export const createGitHubRepositoryAdapter = (
         return mapCommitDetail(data);
       }),
 
+    compareCommits: ({ repo, range, page, perPage }) =>
+      call(async () => {
+        const { data } = await octokit.rest.repos.compareCommitsWithBasehead({
+          owner: repo.owner,
+          repo: repo.repo,
+          basehead: compareRangeToString(range),
+          ...(page === undefined ? {} : { page }),
+          ...(perPage === undefined ? {} : { per_page: perPage }),
+        });
+        return mapCommitComparison(data);
+      }),
+
     listIssues: ({ repo, state, page, perPage }) =>
       call(async () => {
         const { data } = await octokit.rest.issues.listForRepo({
@@ -346,13 +385,41 @@ export const createGitHubRepositoryAdapter = (
         return mapPullRequest(data);
       }),
 
-    updatePullRequest: ({ repo, pullNumber, title, body, base }) =>
+    updatePullRequest: ({ repo, pullNumber, title, body, base, draft }) =>
       call(async () => {
-        const { data } = await octokit.rest.pulls.update({
+        const pull = {
           owner: repo.owner,
           repo: repo.repo,
           pull_number: pullNumber,
           headers: STACKS_API_HEADERS,
+        };
+
+        // Converge the draft flag from the state GitHub reports, so a repeat
+        // request sends no mutation. `unchanged` is the PR as read when it
+        // already had the requested flag, and stays usable as the response.
+        let unchanged: PullGetData | null = null;
+        if (draft !== undefined) {
+          const { data: current } = await octokit.rest.pulls.get(pull);
+          if ((current.draft ?? false) === draft) {
+            unchanged = current;
+          } else {
+            await octokit.graphql(
+              draft
+                ? CONVERT_PULL_REQUEST_TO_DRAFT_MUTATION
+                : MARK_PULL_REQUEST_READY_FOR_REVIEW_MUTATION,
+              { pullRequestId: current.node_id },
+            );
+          }
+        }
+
+        if (title === undefined && body === undefined && base === undefined) {
+          if (unchanged !== null) return mapPullRequest(unchanged);
+          const { data } = await octokit.rest.pulls.get(pull);
+          return mapPullRequest(data);
+        }
+
+        const { data } = await octokit.rest.pulls.update({
+          ...pull,
           ...(title === undefined ? {} : { title }),
           ...(body === undefined ? {} : { body }),
           ...(base === undefined ? {} : { base }),
@@ -362,14 +429,17 @@ export const createGitHubRepositoryAdapter = (
 
     listPullRequestFiles: ({ repo, pullNumber, page, perPage }) =>
       call(async () => {
-        const { data } = await octokit.rest.pulls.listFiles({
+        const { data, headers } = await octokit.rest.pulls.listFiles({
           owner: repo.owner,
           repo: repo.repo,
           pull_number: pullNumber,
           ...(page === undefined ? {} : { page }),
           ...(perPage === undefined ? {} : { per_page: perPage }),
         });
-        return data.map(mapPullRequestFile);
+        return {
+          files: data.map(mapPullRequestFile),
+          ...mapPageInfo({ page, perPage, link: headers.link }),
+        };
       }),
 
     listPullRequestCommits: ({ repo, pullNumber, page, perPage }) =>
@@ -704,6 +774,35 @@ export const createGitHubRepositoryAdapter = (
           per_page: 100,
         });
         return mapCheckRuns(data);
+      }),
+
+    rerunCheckRun: ({ repo, checkRunId }) =>
+      call(async () => {
+        const { data: run } = await octokit.rest.checks.get({
+          owner: repo.owner,
+          repo: repo.repo,
+          check_run_id: checkRunId,
+        });
+        const app = run.app?.slug ?? null;
+        // GitHub's rerequest docs send Actions runs to the job re-run endpoint.
+        if (app === GITHUB_ACTIONS_APP_SLUG) {
+          await octokit.rest.actions.reRunJobForWorkflowRun({
+            owner: repo.owner,
+            repo: repo.repo,
+            job_id: run.id,
+          });
+          return {
+            via: 'actions_job_rerun' as const,
+            checkRunId: run.id,
+            jobId: run.id,
+          };
+        }
+        await octokit.rest.checks.rerequestRun({
+          owner: repo.owner,
+          repo: repo.repo,
+          check_run_id: run.id,
+        });
+        return { via: 'check_run_rerequest' as const, checkRunId: run.id, app };
       }),
   };
 };

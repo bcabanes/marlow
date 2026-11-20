@@ -17,6 +17,7 @@ export interface UpdatePullRequestInput {
   readonly title?: string;
   readonly body?: string;
   readonly base?: string;
+  readonly draft?: boolean;
 }
 
 export const updatePullRequest =
@@ -43,6 +44,7 @@ export const updatePullRequest =
         title: input.title,
         body: input.body,
         base,
+        draft: input.draft,
       }),
     );
   };

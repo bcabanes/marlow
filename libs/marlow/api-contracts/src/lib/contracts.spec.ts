@@ -6,6 +6,7 @@ import {
   createPullRequestReviewBodySchema,
   createPullRequestReviewCommentBodySchema,
   createPullRequestReviewCommentReplyBodySchema,
+  listCommitsQuerySchema,
   listIssuesQuerySchema,
   paginationQuerySchema,
   repoParamsSchema,
@@ -40,6 +41,20 @@ describe('paginationQuerySchema', () => {
       page: 2,
       perPage: 30,
     });
+  });
+});
+
+describe('listCommitsQuerySchema', () => {
+  it("accepts GitHub's sha as an alias for ref", () => {
+    expect(
+      listCommitsQuerySchema.parse({ sha: 'release/1.x', path: 'libs/a' }),
+    ).toEqual({ ref: 'release/1.x', path: 'libs/a', perPage: 30 });
+  });
+
+  it('rejects ref and sha together', () => {
+    expect(
+      listCommitsQuerySchema.safeParse({ ref: 'main', sha: 'next' }).success,
+    ).toBe(false);
   });
 });
 

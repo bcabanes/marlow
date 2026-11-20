@@ -11,6 +11,16 @@ export interface Pagination {
   readonly perPage?: number;
 }
 
+/**
+ * Where a paged list response sits. Send `nextPage` back as `page` to read on;
+ * it is null on the last page.
+ */
+export interface PageInfo {
+  readonly page: number;
+  readonly perPage: number;
+  readonly nextPage: number | null;
+}
+
 export type IssueState = 'open' | 'closed' | 'all';
 export type PullRequestState = 'open' | 'closed' | 'all';
 
@@ -107,6 +117,21 @@ export interface CommitListItem {
   readonly messageHeadline: string;
   readonly author: GitActor | null;
   readonly committer: GitActor | null;
+}
+
+/**
+ * The difference between two refs. `commits` is one page of the commits that
+ * head has and base lacks, oldest first; `totalCommits` counts all of them.
+ */
+export interface CommitComparison {
+  /** diverged | ahead | behind | identical */
+  readonly status: string;
+  readonly aheadBy: number;
+  readonly behindBy: number;
+  readonly totalCommits: number;
+  readonly commits: readonly CommitListItem[];
+  /** Changed files without patches. GitHub sends them on page 1 only, at most 300. */
+  readonly files: readonly CommitFile[];
 }
 
 /**
@@ -253,6 +278,10 @@ export interface PullRequest extends PullRequestSummary {
   readonly commits: number;
   /** Number of files the pull request changes. */
   readonly changedFiles: number;
+  /** Whether GitHub can merge the head cleanly; null while GitHub is still computing it. */
+  readonly mergeable: boolean | null;
+  /** GitHub's `mergeable_state`, e.g. clean, blocked, behind, dirty, unstable, draft, or unknown. */
+  readonly mergeableState: string;
 }
 
 /**
@@ -276,6 +305,11 @@ export interface PullRequestFile {
   readonly additions: number;
   readonly deletions: number;
   readonly changes: number;
+}
+
+/** One page of the files a pull request changes. */
+export interface PullRequestFilePage extends PageInfo {
+  readonly files: readonly PullRequestFile[];
 }
 
 /** A compact pull request entry returned by GitHub's stack collection. */
@@ -404,7 +438,47 @@ export interface CombinedStatus {
 }
 
 export interface CheckRun {
+  readonly id: number;
   readonly name: string;
+  /** queued | in_progress | completed (plus GitHub's waiting/requested/pending). */
   readonly status: string;
   readonly conclusion: string | null;
+  /** Slug of the GitHub App that owns the run, e.g. `github-actions`. */
+  readonly app: string | null;
+  /** The app's page for this run (for Actions, the job log). */
+  readonly detailsUrl: string | null;
+  readonly startedAt: string | null;
+  readonly completedAt: string | null;
+  /** The run's output title. */
+  readonly title: string | null;
+  /** The run's output summary, cut to a bounded length; see `summaryTruncated`. */
+  readonly summary: string | null;
+  /** True when `summary` was cut short. */
+  readonly summaryTruncated: boolean;
+}
+
+/**
+ * How Marlow asked GitHub to run a check again. GitHub Actions jobs re-run
+ * through the Actions API; check runs owned by any other app are rerequested,
+ * which hands the decision to that app.
+ */
+export type CheckRunRerun =
+  | {
+      /** `POST /actions/jobs/{jobId}/rerun`; GitHub also re-runs dependent jobs. */
+      readonly via: 'actions_job_rerun';
+      readonly checkRunId: number;
+      readonly jobId: number;
+    }
+  | {
+      /** `POST /check-runs/{checkRunId}/rerequest`, sent to the owning app. */
+      readonly via: 'check_run_rerequest';
+      readonly checkRunId: number;
+      readonly app: string | null;
+    };
+
+/** CI state for a pull request's current head commit. */
+export interface PullRequestChecks {
+  readonly headSha: string;
+  readonly checkRuns: readonly CheckRun[];
+  readonly combinedStatus: CombinedStatus;
 }

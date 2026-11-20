@@ -1,5 +1,7 @@
 import {
   AsyncMergeId,
+  CheckRunId,
+  CompareRange,
   FilePath,
   GitRef,
   GitSha,
@@ -16,8 +18,10 @@ import {
   AsyncMergeSubmission,
   AssigneeSet,
   CheckRun,
+  CheckRunRerun,
   CodeSearchResult,
   CombinedStatus,
+  CommitComparison,
   CommitDetail,
   CommitListItem,
   FileContents,
@@ -31,7 +35,7 @@ import {
   Pagination,
   PermissionCheck,
   PullRequest,
-  PullRequestFile,
+  PullRequestFilePage,
   PullRequestReview,
   PullRequestState,
   PullRequestMergeAction,
@@ -114,6 +118,13 @@ export interface GitHubRepositoryPort {
     readonly sha: GitSha;
   }): Promise<CommitDetail>;
 
+  compareCommits(
+    input: {
+      readonly repo: RepoRef;
+      readonly range: CompareRange;
+    } & Pagination,
+  ): Promise<CommitComparison>;
+
   listIssues(
     input: {
       readonly repo: RepoRef;
@@ -186,12 +197,17 @@ export interface GitHubRepositoryPort {
     readonly pullNumber: PullRequestNumber;
   }): Promise<PullRequest>;
 
+  /**
+   * Edits title/body/base and converges the draft flag to `draft` when given.
+   * Setting the draft flag it already has is a no-op, not an error.
+   */
   updatePullRequest(input: {
     readonly repo: RepoRef;
     readonly pullNumber: PullRequestNumber;
     readonly title?: string;
     readonly body?: string;
     readonly base?: GitRef;
+    readonly draft?: boolean;
   }): Promise<PullRequest>;
 
   listPullRequestFiles(
@@ -199,7 +215,7 @@ export interface GitHubRepositoryPort {
       readonly repo: RepoRef;
       readonly pullNumber: PullRequestNumber;
     } & Pagination,
-  ): Promise<readonly PullRequestFile[]>;
+  ): Promise<PullRequestFilePage>;
 
   listPullRequestCommits(
     input: {
@@ -340,4 +356,10 @@ export interface GitHubRepositoryPort {
     readonly repo: RepoRef;
     readonly ref: GitRef;
   }): Promise<readonly CheckRun[]>;
+
+  /** Re-runs an Actions job, or rerequests a check run owned by another app. */
+  rerunCheckRun(input: {
+    readonly repo: RepoRef;
+    readonly checkRunId: CheckRunId;
+  }): Promise<CheckRunRerun>;
 }

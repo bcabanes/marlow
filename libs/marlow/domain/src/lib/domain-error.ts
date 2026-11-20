@@ -16,6 +16,8 @@ export const DOMAIN_ERROR_CODES = {
   InvalidPullRequestStackNumber: 'invalid_pull_request_stack_number',
   InvalidAsyncMergeId: 'invalid_async_merge_id',
   InvalidReviewCommentId: 'invalid_review_comment_id',
+  InvalidCheckRunId: 'invalid_check_run_id',
+  InvalidCompareRange: 'invalid_compare_range',
   InvalidSearchQuery: 'invalid_search_query',
 } as const;
 

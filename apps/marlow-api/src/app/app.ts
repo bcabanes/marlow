@@ -4,6 +4,7 @@ import { AppDependencies } from './dependencies';
 import { registerErrorHandler } from './error-handler';
 import { registerCommitsRoutes } from './routes/commits.routes';
 import { registerContentsRoutes } from './routes/contents.routes';
+import { registerDiscoveryRoutes } from './routes/discovery.routes';
 import { registerHealthRoutes } from './routes/health.routes';
 import { registerIssuesRoutes } from './routes/issues.routes';
 import { registerOpenApiRoutes } from './routes/openapi.routes';
@@ -24,6 +25,7 @@ export async function app(
 
   registerErrorHandler(fastify, opts.deps);
 
+  registerDiscoveryRoutes(fastify);
   registerHealthRoutes(fastify);
   registerOpenApiRoutes(fastify);
   registerReposRoutes(fastify, opts.deps);

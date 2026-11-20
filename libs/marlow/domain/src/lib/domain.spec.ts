@@ -4,6 +4,8 @@ import {
   assertRepoAllowed,
   createFilePath,
   createAsyncMergeId,
+  createCheckRunId,
+  createCompareRange,
   createGitRef,
   createGitSha,
   createIssueNumber,
@@ -105,6 +107,7 @@ describe('issue and pull request numbers', () => {
     expect(createPullRequestNumber(42).ok).toBe(true);
     expect(createPullRequestStackNumber(7).ok).toBe(true);
     expect(createReviewCommentId(555).ok).toBe(true);
+    expect(createCheckRunId(399444496).ok).toBe(true);
   });
 
   it.each([0, -1, 1.5, Number.NaN])('rejects %j', (value) => {
@@ -112,6 +115,7 @@ describe('issue and pull request numbers', () => {
     expect(createPullRequestNumber(value).ok).toBe(false);
     expect(createPullRequestStackNumber(value).ok).toBe(false);
     expect(createReviewCommentId(value).ok).toBe(false);
+    expect(createCheckRunId(value).ok).toBe(false);
   });
 });
 
@@ -139,5 +143,33 @@ describe('pull request stack members', () => {
         Array.from({ length: 101 }, (_, index) => index + 1),
       ).ok,
     ).toBe(false);
+  });
+});
+
+describe('createCompareRange', () => {
+  it('splits BASE...HEAD into two refs, keeping slashes in branch names', () => {
+    expect(unwrap(createCompareRange('main...feat/compare'))).toEqual({
+      base: 'main',
+      head: 'feat/compare',
+    });
+  });
+
+  it.each(['main', 'main..feat', 'a...b...c', '...main'])(
+    'rejects %j as a compare range',
+    (value) => {
+      const result = createCompareRange(value);
+      expect(result.ok).toBe(false);
+      if (!result.ok) {
+        expect(['invalid_compare_range', 'invalid_git_ref']).toContain(
+          result.error.code,
+        );
+      }
+    },
+  );
+
+  it('rejects a cross-repository side', () => {
+    const result = createCompareRange('octocat:main...nrwl:feature');
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.code).toBe('invalid_git_ref');
   });
 });

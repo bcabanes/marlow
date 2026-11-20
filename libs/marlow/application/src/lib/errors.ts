@@ -17,8 +17,27 @@ export type GitHubErrorKind =
   | 'unavailable'
   | 'unknown';
 
+/** One entry of GitHub's `errors[]` array; GitHub omits fields it has no value for. */
+export interface GitHubUpstreamErrorEntry {
+  readonly resource?: string;
+  readonly field?: string;
+  readonly code?: string;
+  readonly message?: string;
+}
+
+/**
+ * The client-safe part of a GitHub error body: its top-level `message` and its
+ * `errors[]` entries. Adapters build it from the response body only, never from
+ * headers, and redact anything shaped like a token.
+ */
+export interface GitHubUpstreamError {
+  readonly message: string | null;
+  readonly errors: readonly GitHubUpstreamErrorEntry[];
+}
+
 export interface GitHubPortErrorOptions {
   readonly status?: number;
+  readonly upstream?: GitHubUpstreamError;
   readonly cause?: unknown;
 }
 
@@ -26,6 +45,8 @@ export interface GitHubPortErrorOptions {
 export class GitHubPortError extends Error {
   readonly kind: GitHubErrorKind;
   readonly status: number | undefined;
+  /** What GitHub said about the failure, when its response carried a body. */
+  readonly upstream: GitHubUpstreamError | undefined;
 
   constructor(
     kind: GitHubErrorKind,
@@ -39,6 +60,7 @@ export class GitHubPortError extends Error {
     this.name = 'GitHubPortError';
     this.kind = kind;
     this.status = options.status;
+    this.upstream = options.upstream;
   }
 }
 

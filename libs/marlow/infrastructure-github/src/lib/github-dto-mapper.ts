@@ -5,7 +5,9 @@ import {
   CheckRun,
   CodeSearchResult,
   CombinedStatus,
+  CommitComparison,
   CommitDetail,
+  CommitFile,
   CommitListItem,
   CommitSummary,
   FileContents,
@@ -16,6 +18,7 @@ import {
   LabelSet,
   MilestoneRef,
   MilestoneResult,
+  PageInfo,
   PermissionCheck,
   PullRequest,
   PullRequestFile,
@@ -43,6 +46,9 @@ type Data<T extends Promise<{ data: unknown }>> = Awaited<T>['data'];
 
 type RepoGetData = Data<ReturnType<Rest['repos']['get']>>;
 type CommitGetData = Data<ReturnType<Rest['repos']['getCommit']>>;
+type CompareData = Data<
+  ReturnType<Rest['repos']['compareCommitsWithBasehead']>
+>;
 type TreeData = Data<ReturnType<Rest['git']['getTree']>>;
 type SearchCodeData = Data<ReturnType<Rest['search']['code']>>;
 type PullFileItem = Data<ReturnType<Rest['pulls']['listFiles']>>[number];
@@ -50,6 +56,7 @@ type CombinedStatusData = Data<
   ReturnType<Rest['repos']['getCombinedStatusForRef']>
 >;
 type CheckRunsData = Data<ReturnType<Rest['checks']['listForRef']>>;
+type CheckRunItem = CheckRunsData['check_runs'][number];
 
 type GitActorInput = {
   readonly name?: string | null;
@@ -120,6 +127,8 @@ interface GhPullLike {
   readonly milestone?: GhMilestone;
   readonly commits?: number;
   readonly changed_files?: number;
+  readonly mergeable?: boolean | null;
+  readonly mergeable_state?: string;
   readonly created_at: string;
   readonly updated_at: string;
 }
@@ -269,6 +278,15 @@ export const mapCommitListItem = (data: GhCommitLike): CommitListItem => ({
   committer: mapActor(data.commit.committer),
 });
 
+// Drops the patch: file rows stay small enough for list-sized responses.
+const mapCommitFile = (file: CommitFile): CommitFile => ({
+  filename: file.filename,
+  status: file.status,
+  additions: file.additions,
+  deletions: file.deletions,
+  changes: file.changes,
+});
+
 export const mapCommitDetail = (data: CommitGetData): CommitDetail => ({
   ...mapCommitSummary(data),
   stats: {
@@ -276,13 +294,16 @@ export const mapCommitDetail = (data: CommitGetData): CommitDetail => ({
     deletions: data.stats?.deletions ?? 0,
     total: data.stats?.total ?? 0,
   },
-  files: (data.files ?? []).map((file) => ({
-    filename: file.filename,
-    status: file.status,
-    additions: file.additions,
-    deletions: file.deletions,
-    changes: file.changes,
-  })),
+  files: (data.files ?? []).map(mapCommitFile),
+});
+
+export const mapCommitComparison = (data: CompareData): CommitComparison => ({
+  status: data.status,
+  aheadBy: data.ahead_by,
+  behindBy: data.behind_by,
+  totalCommits: data.total_commits,
+  commits: data.commits.map(mapCommitListItem),
+  files: (data.files ?? []).map(mapCommitFile),
 });
 
 export const mapIssueSummary = (data: GhIssueLike): IssueSummary => ({
@@ -373,6 +394,8 @@ export const mapPullRequest = (data: GhPullLike): PullRequest => ({
   body: data.body ?? null,
   commits: data.commits ?? 0,
   changedFiles: data.changed_files ?? 0,
+  mergeable: data.mergeable ?? null,
+  mergeableState: data.mergeable_state ?? 'unknown',
 });
 
 export const mapPullRequestReview = (
@@ -385,6 +408,26 @@ export const mapPullRequestReview = (
   submittedAt: data.submitted_at ?? null,
   htmlUrl: data.html_url,
 });
+
+// GitHub's page size when a request sends no per_page.
+const GITHUB_DEFAULT_PER_PAGE = 30;
+
+/**
+ * Builds page info from GitHub's `Link` header, which carries `rel="next"`
+ * exactly when another page exists.
+ */
+export const mapPageInfo = (input: {
+  readonly page: number | undefined;
+  readonly perPage: number | undefined;
+  readonly link: string | undefined;
+}): PageInfo => {
+  const page = input.page ?? 1;
+  return {
+    page,
+    perPage: input.perPage ?? GITHUB_DEFAULT_PER_PAGE,
+    nextPage: input.link?.includes('rel="next"') ? page + 1 : null,
+  };
+};
 
 export const mapPullRequestFile = (data: PullFileItem): PullRequestFile => ({
   filename: data.filename,
@@ -479,12 +522,32 @@ export const mapCombinedStatus = (
   })),
 });
 
-export const mapCheckRuns = (data: CheckRunsData): readonly CheckRun[] =>
-  data.check_runs.map((run) => ({
+/** Longest check-run output summary returned; longer ones are cut and flagged. */
+export const CHECK_RUN_SUMMARY_MAX_LENGTH = 2000;
+
+export const mapCheckRun = (run: CheckRunItem): CheckRun => {
+  const summary = run.output.summary ?? null;
+  const summaryTruncated =
+    summary !== null && summary.length > CHECK_RUN_SUMMARY_MAX_LENGTH;
+  return {
+    id: run.id,
     name: run.name,
     status: run.status,
     conclusion: run.conclusion ?? null,
-  }));
+    app: run.app?.slug ?? null,
+    detailsUrl: run.details_url ?? null,
+    startedAt: run.started_at ?? null,
+    completedAt: run.completed_at ?? null,
+    title: run.output.title ?? null,
+    summary: summaryTruncated
+      ? summary.slice(0, CHECK_RUN_SUMMARY_MAX_LENGTH)
+      : summary,
+    summaryTruncated,
+  };
+};
+
+export const mapCheckRuns = (data: CheckRunsData): readonly CheckRun[] =>
+  data.check_runs.map(mapCheckRun);
 
 export const mapLabelSet = (labels: ReadonlyArray<GhLabel>): LabelSet => ({
   labels: extractLabelNames(labels),

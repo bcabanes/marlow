@@ -4,7 +4,7 @@ import {
   createPullRequestNumber,
   ok,
 } from '@org/marlow-domain';
-import { PullRequestFile } from '../dtos.js';
+import { PullRequestFilePage } from '../dtos.js';
 import { GitHubRepositoryPort } from '../ports/github-repository.port.js';
 import { resolveAllowedRepo } from '../resolve-allowed-repo.js';
 
@@ -20,7 +20,7 @@ export const listPullRequestFiles =
   (github: GitHubRepositoryPort) =>
   async (
     input: ListPullRequestFilesInput,
-  ): Promise<Result<readonly PullRequestFile[], DomainError>> => {
+  ): Promise<Result<PullRequestFilePage, DomainError>> => {
     const repo = resolveAllowedRepo(input.owner, input.repo);
     if (!repo.ok) return repo;
     const pullNumber = createPullRequestNumber(input.pullNumber);

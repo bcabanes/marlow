@@ -1,4 +1,5 @@
 import { API_ERROR_CODES } from '@org/marlow-api-errors';
+import { ROUTE_ALIASES } from './route-aliases';
 
 /**
  * OpenAPI 3.1 description of the Marlow HTTP API.
@@ -85,6 +86,7 @@ export const parameters = {
   stackNumber: param('stackNumber', 'path', true, positiveInt),
   mergeId: param('mergeId', 'path', true, { type: 'string', format: 'uuid' }),
   commentId: param('commentId', 'path', true, positiveInt),
+  checkRunId: param('checkRunId', 'path', true, positiveInt),
   sha: param('sha', 'path', true, nonEmptyString),
   filePath: param(
     'path',
@@ -138,7 +140,27 @@ export const parameters = {
     nonEmptyString,
     'Code search terms. repo:/org:/user:/fork: qualifiers are rejected.',
   ),
-  commitPath: param('path', 'query', false, nonEmptyString),
+  commitPath: param(
+    'path',
+    'query',
+    false,
+    nonEmptyString,
+    'Only commits that touched this file or directory.',
+  ),
+  commitShaFilter: param(
+    'sha',
+    'query',
+    false,
+    nonEmptyString,
+    "Alias for ref (GitHub's name for it). Send one, not both.",
+  ),
+  basehead: param(
+    'basehead',
+    'path',
+    true,
+    nonEmptyString,
+    'BASE...HEAD, for example main...feat/x. Each side is a branch, tag, or SHA in this repository.',
+  ),
 } satisfies Record<string, Parameter>;
 
 // --- request body schemas (mirror api-contracts), referenced by $ref ---
@@ -186,12 +208,14 @@ export const bodySchemas = {
     type: 'object',
     additionalProperties: false,
     required: ['confirm'],
-    description: 'Provide at least one of title, body, or base.',
+    description:
+      'Provide at least one of title, body, base, or draft. draft=false marks a draft ready for review; draft=true converts it back to a draft. Requesting the current draft state changes nothing.',
     properties: {
       confirm: { const: true },
       title: { type: 'string', minLength: 1, maxLength: 256 },
       body: { type: 'string', maxLength: 65536 },
       base: nonEmptyString,
+      draft: { type: 'boolean' },
     },
   },
   CreatePullRequestStack: {
@@ -783,6 +807,218 @@ const responseSchemas = {
       },
     },
   },
+  PullRequestFilePage: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['files', 'page', 'perPage', 'nextPage'],
+    properties: {
+      files: {
+        type: 'array',
+        maxItems: 100,
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['filename', 'status', 'additions', 'deletions', 'changes'],
+          properties: {
+            filename: { type: 'string' },
+            status: { type: 'string' },
+            additions: { type: 'integer', minimum: 0 },
+            deletions: { type: 'integer', minimum: 0 },
+            changes: { type: 'integer', minimum: 0 },
+          },
+        },
+      },
+      page: positiveInt,
+      perPage: { type: 'integer', minimum: 1, maximum: 100 },
+      nextPage: {
+        type: ['integer', 'null'],
+        minimum: 2,
+        description:
+          'Send this as page to read the next page; null on the last page.',
+      },
+    },
+  },
+  CommitComparison: {
+    type: 'object',
+    additionalProperties: false,
+    required: [
+      'status',
+      'aheadBy',
+      'behindBy',
+      'totalCommits',
+      'commits',
+      'files',
+    ],
+    properties: {
+      status: {
+        type: 'string',
+        enum: ['diverged', 'ahead', 'behind', 'identical'],
+      },
+      aheadBy: { type: 'integer', minimum: 0 },
+      behindBy: { type: 'integer', minimum: 0 },
+      totalCommits: {
+        type: 'integer',
+        minimum: 0,
+        description:
+          'All commits head has that base lacks; page through them with page/perPage.',
+      },
+      commits: {
+        type: 'array',
+        maxItems: 100,
+        description: 'This page of commits, oldest first, subject line only.',
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['sha', 'messageHeadline', 'author', 'committer'],
+          properties: {
+            sha: nonEmptyString,
+            messageHeadline: { type: 'string' },
+            author: { $ref: '#/components/schemas/GitActor' },
+            committer: { $ref: '#/components/schemas/GitActor' },
+          },
+        },
+      },
+      files: {
+        type: 'array',
+        maxItems: 300,
+        description:
+          'Changed files without patches. Only page 1 carries files; GitHub caps the list at 300.',
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['filename', 'status', 'additions', 'deletions', 'changes'],
+          properties: {
+            filename: { type: 'string' },
+            status: { type: 'string' },
+            additions: { type: 'integer', minimum: 0 },
+            deletions: { type: 'integer', minimum: 0 },
+            changes: { type: 'integer', minimum: 0 },
+          },
+        },
+      },
+    },
+  },
+  GitActor: {
+    oneOf: [
+      { type: 'null' },
+      {
+        type: 'object',
+        additionalProperties: false,
+        required: ['name', 'email', 'date'],
+        properties: {
+          name: { type: 'string' },
+          email: { type: 'string' },
+          date: { type: 'string' },
+        },
+      },
+    ],
+  },
+  CheckRun: {
+    type: 'object',
+    additionalProperties: false,
+    required: [
+      'id',
+      'name',
+      'status',
+      'conclusion',
+      'app',
+      'detailsUrl',
+      'startedAt',
+      'completedAt',
+      'title',
+      'summary',
+      'summaryTruncated',
+    ],
+    properties: {
+      id: positiveInt,
+      name: { type: 'string' },
+      status: { type: 'string' },
+      conclusion: { type: ['string', 'null'] },
+      app: {
+        type: ['string', 'null'],
+        description:
+          'Slug of the GitHub App that owns the run; github-actions for Actions jobs.',
+      },
+      detailsUrl: { type: ['string', 'null'], format: 'uri' },
+      startedAt: { type: ['string', 'null'], format: 'date-time' },
+      completedAt: { type: ['string', 'null'], format: 'date-time' },
+      title: { type: ['string', 'null'] },
+      summary: {
+        type: ['string', 'null'],
+        maxLength: 2000,
+        description: 'Output summary, cut to 2000 characters.',
+      },
+      summaryTruncated: {
+        type: 'boolean',
+        description: 'True when summary was cut short.',
+      },
+    },
+  },
+  CheckRunList: {
+    type: 'array',
+    items: { $ref: '#/components/schemas/CheckRun' },
+  },
+  CombinedStatus: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['state', 'totalCount', 'statuses'],
+    properties: {
+      state: { type: 'string' },
+      totalCount: { type: 'integer', minimum: 0 },
+      statuses: {
+        type: 'array',
+        items: {
+          type: 'object',
+          additionalProperties: false,
+          required: ['context', 'state', 'description', 'targetUrl'],
+          properties: {
+            context: { type: 'string' },
+            state: { type: 'string' },
+            description: { type: ['string', 'null'] },
+            targetUrl: { type: ['string', 'null'] },
+          },
+        },
+      },
+    },
+  },
+  CheckRunRerun: {
+    oneOf: [
+      {
+        type: 'object',
+        additionalProperties: false,
+        required: ['via', 'checkRunId', 'jobId'],
+        description:
+          'A GitHub Actions run: Marlow called POST /actions/jobs/{jobId}/rerun, which also re-runs dependent jobs.',
+        properties: {
+          via: { const: 'actions_job_rerun' },
+          checkRunId: positiveInt,
+          jobId: positiveInt,
+        },
+      },
+      {
+        type: 'object',
+        additionalProperties: false,
+        required: ['via', 'checkRunId', 'app'],
+        description:
+          'Any other app: Marlow called POST /check-runs/{checkRunId}/rerequest and the owning app decides whether to run again.',
+        properties: {
+          via: { const: 'check_run_rerequest' },
+          checkRunId: positiveInt,
+          app: { type: ['string', 'null'] },
+        },
+      },
+    ],
+  },
+  PullRequestChecks: {
+    type: 'object',
+    additionalProperties: false,
+    required: ['headSha', 'checkRuns', 'combinedStatus'],
+    properties: {
+      headSha: nonEmptyString,
+      checkRuns: { $ref: '#/components/schemas/CheckRunList' },
+      combinedStatus: { $ref: '#/components/schemas/CombinedStatus' },
+    },
+  },
 } as const;
 
 export interface Endpoint {
@@ -796,7 +1032,7 @@ export interface Endpoint {
   readonly responses?: Readonly<
     Partial<
       Record<
-        200 | 201 | 202 | 204 | 400 | 409,
+        200 | 201 | 202 | 204 | 302 | 400 | 409,
         {
           readonly description: string;
           readonly responseBody?: keyof typeof responseSchemas | 'Error';
@@ -820,6 +1056,17 @@ const pagination = ['page', 'perPage'] as const;
 export const endpoints: readonly Endpoint[] = [
   {
     method: 'get',
+    path: '/',
+    tag: 'meta',
+    operationId: 'getRouteIndex',
+    summary: 'Route index: this cheat-sheet as Markdown',
+    returns: 'this cheat-sheet (text/markdown)',
+    responses: {
+      200: { description: 'The agent cheat-sheet, as text/markdown' },
+    },
+  },
+  {
+    method: 'get',
     path: '/openapi.json',
     tag: 'meta',
     operationId: 'getOpenApiDocument',
@@ -834,6 +1081,15 @@ export const endpoints: readonly Endpoint[] = [
     summary: 'Liveness check',
     returns: '{ "status": "ok" }',
   },
+  ...ROUTE_ALIASES.map((alias): Endpoint => ({
+    method: 'get',
+    path: alias.path,
+    tag: 'meta',
+    operationId: alias.operationId,
+    summary: `Redirects to ${alias.target}`,
+    returns: `302 to ${alias.target}`,
+    responses: { 302: { description: `Redirects to ${alias.target}` } },
+  })),
   {
     method: 'get',
     path: '/repos',
@@ -885,7 +1141,13 @@ export const endpoints: readonly Endpoint[] = [
     operationId: 'listCommits',
     summary: 'List commits',
     returns: 'CommitListItem[]',
-    params: [...repoParams, 'refOptional', 'commitPath', ...pagination],
+    params: [
+      ...repoParams,
+      'refOptional',
+      'commitShaFilter',
+      'commitPath',
+      ...pagination,
+    ],
   },
   {
     method: 'get',
@@ -895,6 +1157,17 @@ export const endpoints: readonly Endpoint[] = [
     summary: 'Get a commit with stats and files',
     returns: 'CommitDetail',
     params: [...repoParams, 'sha'],
+  },
+  {
+    method: 'get',
+    path: '/repos/{owner}/{repo}/compare/{basehead}',
+    tag: 'commits',
+    operationId: 'compareCommits',
+    summary:
+      'Compare two refs: ahead/behind counts, one page of commits (oldest first), and changed files on page 1',
+    returns: 'CommitComparison',
+    responseBody: 'CommitComparison',
+    params: [...repoParams, 'basehead', ...pagination],
   },
   {
     method: 'get',
@@ -1121,7 +1394,7 @@ export const endpoints: readonly Endpoint[] = [
     path: '/repos/{owner}/{repo}/pulls/{pullNumber}',
     tag: 'pulls',
     operationId: 'updatePullRequest',
-    summary: 'Update a pull request (title, body, base)',
+    summary: 'Update a pull request (title, body, base, draft)',
     returns: 'PullRequest',
     params: pullParams,
     body: 'UpdatePullRequest',
@@ -1132,8 +1405,10 @@ export const endpoints: readonly Endpoint[] = [
     path: '/repos/{owner}/{repo}/pulls/{pullNumber}/files',
     tag: 'pulls',
     operationId: 'listPullRequestFiles',
-    summary: 'List the files changed in a pull request',
-    returns: 'PullRequestFile[]',
+    summary:
+      'List one page of the files changed in a pull request; nextPage is null on the last page',
+    returns: '{ files: PullRequestFile[], page, perPage, nextPage }',
+    responseBody: 'PullRequestFilePage',
     params: [...pullParams, ...pagination],
   },
   {
@@ -1380,6 +1655,7 @@ export const endpoints: readonly Endpoint[] = [
     operationId: 'getCombinedStatus',
     summary: 'Combined commit status for a ref',
     returns: 'CombinedStatus',
+    responseBody: 'CombinedStatus',
     params: [...repoParams, 'refRequired'],
   },
   {
@@ -1389,7 +1665,32 @@ export const endpoints: readonly Endpoint[] = [
     operationId: 'listCheckRuns',
     summary: 'Check runs for a ref',
     returns: 'CheckRun[]',
+    responseBody: 'CheckRunList',
     params: [...repoParams, 'refRequired'],
+  },
+  {
+    method: 'post',
+    path: '/repos/{owner}/{repo}/check-runs/{checkRunId}/rerequest',
+    tag: 'checks',
+    operationId: 'rerunCheckRun',
+    summary:
+      'Run a check again: re-runs a GitHub Actions job, or rerequests a check run owned by another app',
+    returns: 'CheckRunRerun',
+    responseBody: 'CheckRunRerun',
+    params: [...repoParams, 'checkRunId'],
+    body: 'Confirm',
+    write: true,
+  },
+  {
+    method: 'get',
+    path: '/repos/{owner}/{repo}/pulls/{pullNumber}/checks',
+    tag: 'checks',
+    operationId: 'getPullRequestChecks',
+    summary:
+      "Check runs and combined status for a pull request's current head commit",
+    returns: '{ headSha, checkRuns: CheckRun[], combinedStatus }',
+    responseBody: 'PullRequestChecks',
+    params: pullParams,
   },
 ];
 

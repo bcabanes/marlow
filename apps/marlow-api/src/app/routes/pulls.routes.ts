@@ -111,6 +111,7 @@ export const registerPullsRoutes = (
         title: body.title,
         body: body.body,
         base: body.base,
+        draft: body.draft,
       }),
     );
   });

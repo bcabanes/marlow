@@ -2,6 +2,7 @@ import { GitHubPortError, GitHubRepositoryPort } from '@org/marlow-application';
 import Fastify, { FastifyInstance } from 'fastify';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { app } from './app';
+import { buildCheatSheet } from './cheatsheet';
 import { AppConfig } from './config';
 import { AppDependencies } from './dependencies';
 
@@ -38,6 +39,30 @@ describe('marlow-api', () => {
     const response = await server.inject({ method: 'GET', url: '/health' });
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({ status: 'ok' });
+  });
+
+  it('serves the route index as Markdown at GET /', async () => {
+    await start(buildDeps());
+    const response = await server.inject({ method: 'GET', url: '/' });
+    expect(response.statusCode).toBe(200);
+    expect(response.headers['content-type']).toContain('text/markdown');
+    expect(response.body).toBe(buildCheatSheet());
+    expect(response.body).toContain(
+      'GET /repos/{owner}/{repo}/pulls/{pullNumber}/checks',
+    );
+  });
+
+  it.each([
+    ['/docs', '/'],
+    ['/help', '/'],
+    ['/routes', '/'],
+    ['/api', '/'],
+    ['/healthz', '/health'],
+  ])('redirects the guessed path %s to %s', async (url, location) => {
+    await start(buildDeps());
+    const response = await server.inject({ method: 'GET', url });
+    expect(response.statusCode).toBe(302);
+    expect(response.headers.location).toBe(location);
   });
 
   it('lists exactly the allow-listed repositories', async () => {
@@ -476,6 +501,243 @@ describe('marlow-api', () => {
       },
     });
     expect(response.body).not.toContain('ghp_secret');
+  });
+
+  it("returns GitHub's rejection detail in production mode", async () => {
+    const upstream = {
+      message: 'Validation Failed',
+      errors: [
+        {
+          resource: 'PullRequest',
+          field: 'base',
+          code: 'invalid',
+          message: 'base is not a branch',
+        },
+      ],
+    };
+    const updatePullRequest = vi.fn().mockRejectedValue(
+      new GitHubPortError('validation_failed', 'raw ghp_secret', {
+        status: 422,
+        upstream,
+      }),
+    );
+    await start({
+      config: { ...config, exposeInternalErrors: false },
+      getGitHubPort: async () =>
+        ({ updatePullRequest }) as unknown as GitHubRepositoryPort,
+    });
+
+    const response = await server.inject({
+      method: 'PATCH',
+      url: '/repos/nrwl/nx/pulls/42',
+      payload: { confirm: true, base: 'missing' },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toEqual({
+      error: {
+        code: 'validation_failed',
+        message: 'GitHub rejected the request',
+        details: { github: upstream },
+      },
+    });
+    expect(response.body).not.toContain('ghp_secret');
+  });
+
+  it('marks a draft pull request ready for review via PATCH draft: false', async () => {
+    const updatePullRequest = vi
+      .fn()
+      .mockResolvedValue({ number: 42, draft: false });
+    await start(buildDeps({ updatePullRequest }));
+
+    const response = await server.inject({
+      method: 'PATCH',
+      url: '/repos/nrwl/nx/pulls/42',
+      payload: { confirm: true, draft: false },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ number: 42, draft: false });
+    expect(updatePullRequest).toHaveBeenCalledWith({
+      repo: { owner: 'nrwl', repo: 'nx' },
+      pullNumber: 42,
+      title: undefined,
+      body: undefined,
+      base: undefined,
+      draft: false,
+    });
+  });
+
+  it('rejects a pull-request PATCH that changes nothing', async () => {
+    const updatePullRequest = vi.fn();
+    await start(buildDeps({ updatePullRequest }));
+
+    const response = await server.inject({
+      method: 'PATCH',
+      url: '/repos/nrwl/nx/pulls/42',
+      payload: { confirm: true },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.code).toBe('validation_failed');
+    expect(updatePullRequest).not.toHaveBeenCalled();
+  });
+
+  it('re-runs a check run when confirm: true and reports which call ran', async () => {
+    const rerun = { via: 'actions_job_rerun', checkRunId: 11, jobId: 11 };
+    const rerunCheckRun = vi.fn().mockResolvedValue(rerun);
+    await start(buildDeps({ rerunCheckRun }));
+
+    const response = await server.inject({
+      method: 'POST',
+      url: '/repos/nrwl/nx/check-runs/11/rerequest',
+      payload: { confirm: true },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual(rerun);
+    expect(rerunCheckRun).toHaveBeenCalledWith({
+      repo: { owner: 'nrwl', repo: 'nx' },
+      checkRunId: 11,
+    });
+  });
+
+  it('filters commit history by path and accepts sha as the branch filter', async () => {
+    const listCommits = vi.fn().mockResolvedValue([]);
+    await start(buildDeps({ listCommits }));
+
+    const response = await server.inject({
+      method: 'GET',
+      url: '/repos/nrwl/nx/commits?sha=release%2F1.x&path=libs%2Fa.ts',
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(listCommits).toHaveBeenCalledWith({
+      repo: { owner: 'nrwl', repo: 'nx' },
+      ref: 'release/1.x',
+      path: 'libs/a.ts',
+      page: undefined,
+      perPage: 30,
+    });
+  });
+
+  it('compares BASE...HEAD where the head branch contains slashes', async () => {
+    const comparison = {
+      status: 'ahead',
+      aheadBy: 1,
+      behindBy: 0,
+      totalCommits: 1,
+      commits: [],
+      files: [],
+    };
+    const compareCommits = vi.fn().mockResolvedValue(comparison);
+    await start(buildDeps({ compareCommits }));
+
+    const response = await server.inject({
+      method: 'GET',
+      url: '/repos/nrwl/nx/compare/main...feat/compare-route?perPage=5',
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual(comparison);
+    expect(compareCommits).toHaveBeenCalledWith({
+      repo: { owner: 'nrwl', repo: 'nx' },
+      range: { base: 'main', head: 'feat/compare-route' },
+      page: undefined,
+      perPage: 5,
+    });
+  });
+
+  it('rejects a compare path without BASE...HEAD before GitHub', async () => {
+    const compareCommits = vi.fn();
+    await start(buildDeps({ compareCommits }));
+
+    const response = await server.inject({
+      method: 'GET',
+      url: '/repos/nrwl/nx/compare/main',
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.code).toBe('validation_failed');
+    expect(compareCommits).not.toHaveBeenCalled();
+  });
+
+  it('pages pull-request files and says whether another page exists', async () => {
+    const filePage = { files: [], page: 2, perPage: 100, nextPage: 3 };
+    const listPullRequestFiles = vi.fn().mockResolvedValue(filePage);
+    await start(buildDeps({ listPullRequestFiles }));
+
+    const response = await server.inject({
+      method: 'GET',
+      url: '/repos/nrwl/nx/pulls/42/files?page=2&perPage=100',
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual(filePage);
+    expect(listPullRequestFiles).toHaveBeenCalledWith({
+      repo: { owner: 'nrwl', repo: 'nx' },
+      pullNumber: 42,
+      page: 2,
+      perPage: 100,
+    });
+  });
+
+  it('keeps 100 as the pull-request files page-size cap', async () => {
+    const listPullRequestFiles = vi.fn();
+    await start(buildDeps({ listPullRequestFiles }));
+
+    const response = await server.inject({
+      method: 'GET',
+      url: '/repos/nrwl/nx/pulls/42/files?perPage=101',
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error.code).toBe('validation_failed');
+    expect(listPullRequestFiles).not.toHaveBeenCalled();
+  });
+
+  it("returns CI for a pull request's current head commit", async () => {
+    const headSha = 'c'.repeat(40);
+    const checkRun = {
+      id: 11,
+      name: 'lint',
+      status: 'completed',
+      conclusion: 'failure',
+      app: 'github-actions',
+      detailsUrl: 'https://github.com/nrwl/nx/actions/runs/1/job/11',
+      startedAt: '2020-01-01T00:00:00Z',
+      completedAt: '2020-01-01T00:05:00Z',
+      title: 'Lint failed',
+      summary: '1 error',
+      summaryTruncated: false,
+    };
+    const combinedStatus = { state: 'success', totalCount: 0, statuses: [] };
+    const getPullRequest = vi.fn().mockResolvedValue({ number: 42, headSha });
+    const listCheckRuns = vi.fn().mockResolvedValue([checkRun]);
+    const getCombinedStatus = vi.fn().mockResolvedValue(combinedStatus);
+    await start(
+      buildDeps({ getPullRequest, listCheckRuns, getCombinedStatus }),
+    );
+
+    const response = await server.inject({
+      method: 'GET',
+      url: '/repos/nrwl/nx/pulls/42/checks',
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      headSha,
+      checkRuns: [checkRun],
+      combinedStatus,
+    });
+    expect(listCheckRuns).toHaveBeenCalledWith({
+      repo: { owner: 'nrwl', repo: 'nx' },
+      ref: headSha,
+    });
+    expect(getCombinedStatus).toHaveBeenCalledWith({
+      repo: { owner: 'nrwl', repo: 'nx' },
+      ref: headSha,
+    });
   });
 });
 

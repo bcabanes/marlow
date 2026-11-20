@@ -18,8 +18,16 @@ export const API_ERROR_CODES = {
 export type ApiErrorCode =
   (typeof API_ERROR_CODES)[keyof typeof API_ERROR_CODES];
 
+/**
+ * Who may see an error's `details`. `internal` details (the default) appear
+ * only when the server exposes internals (non-production). `public` details are
+ * safe for any client and appear on 4xx responses in every environment.
+ */
+export type ApiErrorDetailsVisibility = 'internal' | 'public';
+
 export interface ApiErrorOptions {
   readonly details?: unknown;
+  readonly detailsVisibility?: ApiErrorDetailsVisibility;
   readonly cause?: unknown;
 }
 
@@ -28,6 +36,7 @@ export class ApiError extends Error {
   readonly status: number;
   readonly code: ApiErrorCode;
   readonly details: unknown;
+  readonly detailsVisibility: ApiErrorDetailsVisibility;
 
   constructor(
     status: number,
@@ -43,6 +52,7 @@ export class ApiError extends Error {
     this.status = status;
     this.code = code;
     this.details = options.details;
+    this.detailsVisibility = options.detailsVisibility ?? 'internal';
   }
 }
 

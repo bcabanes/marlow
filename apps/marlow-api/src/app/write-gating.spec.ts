@@ -68,6 +68,7 @@ describe('write endpoints require confirm: true', () => {
     ['/repos/nrwl/nx/stacks', { pullNumbers: [1, 2] }],
     ['/repos/nrwl/nx/stacks/1/add', { pullNumbers: [2] }],
     ['/repos/nrwl/nx/stacks/1/unstack', {}],
+    ['/repos/nrwl/nx/check-runs/1/rerequest', {}],
   ])('POST %s without confirm returns 400', async (url, payload) => {
     await start();
     const response = await server.inject({ method: 'POST', url, payload });
@@ -82,6 +83,7 @@ describe('write endpoints require confirm: true', () => {
     ['PUT', '/repos/nrwl/nx/issues/1/milestone', { milestone: 1 }],
     ['DELETE', '/repos/nrwl/nx/issues/1/milestone', {}],
     ['PATCH', '/repos/nrwl/nx/pulls/1', { body: 'updated' }],
+    ['PATCH', '/repos/nrwl/nx/pulls/1', { draft: false }],
     ['DELETE', '/repos/nrwl/nx/pulls/1/labels/bug', {}],
     ['DELETE', '/repos/nrwl/nx/pulls/1/assignees', { assignees: ['octocat'] }],
     ['PUT', '/repos/nrwl/nx/pulls/1/milestone', { milestone: 1 }],

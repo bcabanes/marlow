@@ -1,12 +1,24 @@
-import { getCommit, listCommits } from '@org/marlow-application';
+import {
+  compareCommits,
+  getCommit,
+  listCommits,
+} from '@org/marlow-application';
 import {
   commitShaParamsSchema,
   listCommitsQuerySchema,
+  paginationQuerySchema,
   repoParamsSchema,
 } from '@org/marlow-api-contracts';
 import { FastifyInstance } from 'fastify';
+import { z } from 'zod';
 import { AppDependencies } from '../dependencies';
 import { unwrapResult } from '../error-mapping';
+
+// `BASE...HEAD` sides are often branch names with slashes, so the route takes
+// the rest of the path as a wildcard.
+const compareParamsSchema = repoParamsSchema.extend({
+  '*': z.string().min(1),
+});
 
 export const registerCommitsRoutes = (
   fastify: FastifyInstance,
@@ -27,5 +39,20 @@ export const registerCommitsRoutes = (
     const { owner, repo, sha } = commitShaParamsSchema.parse(request.params);
     const port = await deps.getGitHubPort();
     return unwrapResult(await getCommit(port)({ owner, repo, sha }));
+  });
+
+  fastify.get('/repos/:owner/:repo/compare/*', async (request) => {
+    const params = compareParamsSchema.parse(request.params);
+    const { page, perPage } = paginationQuerySchema.parse(request.query);
+    const port = await deps.getGitHubPort();
+    return unwrapResult(
+      await compareCommits(port)({
+        owner: params.owner,
+        repo: params.repo,
+        basehead: params['*'],
+        page,
+        perPage,
+      }),
+    );
   });
 };

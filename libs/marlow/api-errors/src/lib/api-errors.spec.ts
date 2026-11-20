@@ -39,6 +39,30 @@ describe('toErrorResponse', () => {
     });
   });
 
+  it('returns public 4xx details in production mode', () => {
+    const error = new ApiError(400, 'validation_failed', 'GitHub rejected', {
+      details: { github: { message: 'Validation Failed', errors: [] } },
+      detailsVisibility: 'public',
+    });
+    expect(toErrorResponse(error)).toEqual({
+      error: {
+        code: 'validation_failed',
+        message: 'GitHub rejected',
+        details: { github: { message: 'Validation Failed', errors: [] } },
+      },
+    });
+  });
+
+  it('suppresses public details on 5xx errors in production mode', () => {
+    const error = new ApiError(502, 'upstream_unavailable', 'GitHub down', {
+      details: { github: { message: 'Bad gateway', errors: [] } },
+      detailsVisibility: 'public',
+    });
+    expect(toErrorResponse(error)).toEqual({
+      error: { code: 'upstream_unavailable', message: 'Internal server error' },
+    });
+  });
+
   it('keeps 4xx messages even in production mode', () => {
     expect(toErrorResponse(notFound('no such issue'))).toEqual({
       error: { code: 'not_found', message: 'no such issue' },
